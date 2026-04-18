@@ -32,6 +32,12 @@ const (
 	FieldPreHash = "pre_hash"
 	// FieldUploadID holds the string denoting the upload_id field in the database.
 	FieldUploadID = "upload_id"
+	// FieldTrashedParentFileID holds the string denoting the trashed_parent_file_id field in the database.
+	FieldTrashedParentFileID = "trashed_parent_file_id"
+	// FieldTrashedAt holds the string denoting the trashed_at field in the database.
+	FieldTrashedAt = "trashed_at"
+	// FieldExpiredAt holds the string denoting the expired_at field in the database.
+	FieldExpiredAt = "expired_at"
 	// FieldRevisionID holds the string denoting the revision_id field in the database.
 	FieldRevisionID = "revision_id"
 	// FieldEncryptMode holds the string denoting the encrypt_mode field in the database.
@@ -56,6 +62,9 @@ var Columns = []string{
 	FieldContentHash,
 	FieldPreHash,
 	FieldUploadID,
+	FieldTrashedParentFileID,
+	FieldTrashedAt,
+	FieldExpiredAt,
 	FieldRevisionID,
 	FieldEncryptMode,
 	FieldCreatedAt,
@@ -175,6 +184,21 @@ func ByPreHash(opts ...sql.OrderTermOption) OrderOption {
 // ByUploadID orders the results by the upload_id field.
 func ByUploadID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUploadID, opts...).ToFunc()
+}
+
+// ByTrashedParentFileID orders the results by the trashed_parent_file_id field.
+func ByTrashedParentFileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTrashedParentFileID, opts...).ToFunc()
+}
+
+// ByTrashedAt orders the results by the trashed_at field.
+func ByTrashedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTrashedAt, opts...).ToFunc()
+}
+
+// ByExpiredAt orders the results by the expired_at field.
+func ByExpiredAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExpiredAt, opts...).ToFunc()
 }
 
 // ByRevisionID orders the results by the revision_id field.

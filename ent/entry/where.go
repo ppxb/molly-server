@@ -94,6 +94,21 @@ func UploadID(v string) predicate.Entry {
 	return predicate.Entry(sql.FieldEQ(FieldUploadID, v))
 }
 
+// TrashedParentFileID applies equality check predicate on the "trashed_parent_file_id" field. It's identical to TrashedParentFileIDEQ.
+func TrashedParentFileID(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldEQ(FieldTrashedParentFileID, v))
+}
+
+// TrashedAt applies equality check predicate on the "trashed_at" field. It's identical to TrashedAtEQ.
+func TrashedAt(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldEQ(FieldTrashedAt, v))
+}
+
+// ExpiredAt applies equality check predicate on the "expired_at" field. It's identical to ExpiredAtEQ.
+func ExpiredAt(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldEQ(FieldExpiredAt, v))
+}
+
 // RevisionID applies equality check predicate on the "revision_id" field. It's identical to RevisionIDEQ.
 func RevisionID(v string) predicate.Entry {
 	return predicate.Entry(sql.FieldEQ(FieldRevisionID, v))
@@ -657,6 +672,181 @@ func UploadIDEqualFold(v string) predicate.Entry {
 // UploadIDContainsFold applies the ContainsFold predicate on the "upload_id" field.
 func UploadIDContainsFold(v string) predicate.Entry {
 	return predicate.Entry(sql.FieldContainsFold(FieldUploadID, v))
+}
+
+// TrashedParentFileIDEQ applies the EQ predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDEQ(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldEQ(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDNEQ applies the NEQ predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDNEQ(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldNEQ(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDIn applies the In predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDIn(vs ...string) predicate.Entry {
+	return predicate.Entry(sql.FieldIn(FieldTrashedParentFileID, vs...))
+}
+
+// TrashedParentFileIDNotIn applies the NotIn predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDNotIn(vs ...string) predicate.Entry {
+	return predicate.Entry(sql.FieldNotIn(FieldTrashedParentFileID, vs...))
+}
+
+// TrashedParentFileIDGT applies the GT predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDGT(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldGT(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDGTE applies the GTE predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDGTE(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldGTE(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDLT applies the LT predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDLT(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldLT(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDLTE applies the LTE predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDLTE(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldLTE(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDContains applies the Contains predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDContains(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldContains(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDHasPrefix applies the HasPrefix predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDHasPrefix(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldHasPrefix(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDHasSuffix applies the HasSuffix predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDHasSuffix(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldHasSuffix(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDIsNil applies the IsNil predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDIsNil() predicate.Entry {
+	return predicate.Entry(sql.FieldIsNull(FieldTrashedParentFileID))
+}
+
+// TrashedParentFileIDNotNil applies the NotNil predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDNotNil() predicate.Entry {
+	return predicate.Entry(sql.FieldNotNull(FieldTrashedParentFileID))
+}
+
+// TrashedParentFileIDEqualFold applies the EqualFold predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDEqualFold(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldEqualFold(FieldTrashedParentFileID, v))
+}
+
+// TrashedParentFileIDContainsFold applies the ContainsFold predicate on the "trashed_parent_file_id" field.
+func TrashedParentFileIDContainsFold(v string) predicate.Entry {
+	return predicate.Entry(sql.FieldContainsFold(FieldTrashedParentFileID, v))
+}
+
+// TrashedAtEQ applies the EQ predicate on the "trashed_at" field.
+func TrashedAtEQ(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldEQ(FieldTrashedAt, v))
+}
+
+// TrashedAtNEQ applies the NEQ predicate on the "trashed_at" field.
+func TrashedAtNEQ(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldNEQ(FieldTrashedAt, v))
+}
+
+// TrashedAtIn applies the In predicate on the "trashed_at" field.
+func TrashedAtIn(vs ...time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldIn(FieldTrashedAt, vs...))
+}
+
+// TrashedAtNotIn applies the NotIn predicate on the "trashed_at" field.
+func TrashedAtNotIn(vs ...time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldNotIn(FieldTrashedAt, vs...))
+}
+
+// TrashedAtGT applies the GT predicate on the "trashed_at" field.
+func TrashedAtGT(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldGT(FieldTrashedAt, v))
+}
+
+// TrashedAtGTE applies the GTE predicate on the "trashed_at" field.
+func TrashedAtGTE(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldGTE(FieldTrashedAt, v))
+}
+
+// TrashedAtLT applies the LT predicate on the "trashed_at" field.
+func TrashedAtLT(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldLT(FieldTrashedAt, v))
+}
+
+// TrashedAtLTE applies the LTE predicate on the "trashed_at" field.
+func TrashedAtLTE(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldLTE(FieldTrashedAt, v))
+}
+
+// TrashedAtIsNil applies the IsNil predicate on the "trashed_at" field.
+func TrashedAtIsNil() predicate.Entry {
+	return predicate.Entry(sql.FieldIsNull(FieldTrashedAt))
+}
+
+// TrashedAtNotNil applies the NotNil predicate on the "trashed_at" field.
+func TrashedAtNotNil() predicate.Entry {
+	return predicate.Entry(sql.FieldNotNull(FieldTrashedAt))
+}
+
+// ExpiredAtEQ applies the EQ predicate on the "expired_at" field.
+func ExpiredAtEQ(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldEQ(FieldExpiredAt, v))
+}
+
+// ExpiredAtNEQ applies the NEQ predicate on the "expired_at" field.
+func ExpiredAtNEQ(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldNEQ(FieldExpiredAt, v))
+}
+
+// ExpiredAtIn applies the In predicate on the "expired_at" field.
+func ExpiredAtIn(vs ...time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldIn(FieldExpiredAt, vs...))
+}
+
+// ExpiredAtNotIn applies the NotIn predicate on the "expired_at" field.
+func ExpiredAtNotIn(vs ...time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldNotIn(FieldExpiredAt, vs...))
+}
+
+// ExpiredAtGT applies the GT predicate on the "expired_at" field.
+func ExpiredAtGT(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldGT(FieldExpiredAt, v))
+}
+
+// ExpiredAtGTE applies the GTE predicate on the "expired_at" field.
+func ExpiredAtGTE(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldGTE(FieldExpiredAt, v))
+}
+
+// ExpiredAtLT applies the LT predicate on the "expired_at" field.
+func ExpiredAtLT(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldLT(FieldExpiredAt, v))
+}
+
+// ExpiredAtLTE applies the LTE predicate on the "expired_at" field.
+func ExpiredAtLTE(v time.Time) predicate.Entry {
+	return predicate.Entry(sql.FieldLTE(FieldExpiredAt, v))
+}
+
+// ExpiredAtIsNil applies the IsNil predicate on the "expired_at" field.
+func ExpiredAtIsNil() predicate.Entry {
+	return predicate.Entry(sql.FieldIsNull(FieldExpiredAt))
+}
+
+// ExpiredAtNotNil applies the NotNil predicate on the "expired_at" field.
+func ExpiredAtNotNil() predicate.Entry {
+	return predicate.Entry(sql.FieldNotNull(FieldExpiredAt))
 }
 
 // RevisionIDEQ applies the EQ predicate on the "revision_id" field.

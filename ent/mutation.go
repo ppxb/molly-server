@@ -524,27 +524,30 @@ func (m *DriveMutation) ResetEdge(name string) error {
 // EntryMutation represents an operation that mutates the Entry nodes in the graph.
 type EntryMutation struct {
 	config
-	op             Op
-	typ            string
-	id             *int
-	drive_id       *string
-	file_id        *string
-	parent_file_id *string
-	name           *string
-	_type          *entry.Type
-	size           *int64
-	addsize        *int64
-	content_hash   *string
-	pre_hash       *string
-	upload_id      *string
-	revision_id    *string
-	encrypt_mode   *string
-	created_at     *time.Time
-	updated_at     *time.Time
-	clearedFields  map[string]struct{}
-	done           bool
-	oldValue       func(context.Context) (*Entry, error)
-	predicates     []predicate.Entry
+	op                     Op
+	typ                    string
+	id                     *int
+	drive_id               *string
+	file_id                *string
+	parent_file_id         *string
+	name                   *string
+	_type                  *entry.Type
+	size                   *int64
+	addsize                *int64
+	content_hash           *string
+	pre_hash               *string
+	upload_id              *string
+	trashed_parent_file_id *string
+	trashed_at             *time.Time
+	expired_at             *time.Time
+	revision_id            *string
+	encrypt_mode           *string
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*Entry, error)
+	predicates             []predicate.Entry
 }
 
 var _ ent.Mutation = (*EntryMutation)(nil)
@@ -1028,6 +1031,153 @@ func (m *EntryMutation) ResetUploadID() {
 	delete(m.clearedFields, entry.FieldUploadID)
 }
 
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (m *EntryMutation) SetTrashedParentFileID(s string) {
+	m.trashed_parent_file_id = &s
+}
+
+// TrashedParentFileID returns the value of the "trashed_parent_file_id" field in the mutation.
+func (m *EntryMutation) TrashedParentFileID() (r string, exists bool) {
+	v := m.trashed_parent_file_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTrashedParentFileID returns the old "trashed_parent_file_id" field's value of the Entry entity.
+// If the Entry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *EntryMutation) OldTrashedParentFileID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTrashedParentFileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTrashedParentFileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTrashedParentFileID: %w", err)
+	}
+	return oldValue.TrashedParentFileID, nil
+}
+
+// ClearTrashedParentFileID clears the value of the "trashed_parent_file_id" field.
+func (m *EntryMutation) ClearTrashedParentFileID() {
+	m.trashed_parent_file_id = nil
+	m.clearedFields[entry.FieldTrashedParentFileID] = struct{}{}
+}
+
+// TrashedParentFileIDCleared returns if the "trashed_parent_file_id" field was cleared in this mutation.
+func (m *EntryMutation) TrashedParentFileIDCleared() bool {
+	_, ok := m.clearedFields[entry.FieldTrashedParentFileID]
+	return ok
+}
+
+// ResetTrashedParentFileID resets all changes to the "trashed_parent_file_id" field.
+func (m *EntryMutation) ResetTrashedParentFileID() {
+	m.trashed_parent_file_id = nil
+	delete(m.clearedFields, entry.FieldTrashedParentFileID)
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (m *EntryMutation) SetTrashedAt(t time.Time) {
+	m.trashed_at = &t
+}
+
+// TrashedAt returns the value of the "trashed_at" field in the mutation.
+func (m *EntryMutation) TrashedAt() (r time.Time, exists bool) {
+	v := m.trashed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTrashedAt returns the old "trashed_at" field's value of the Entry entity.
+// If the Entry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *EntryMutation) OldTrashedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTrashedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTrashedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTrashedAt: %w", err)
+	}
+	return oldValue.TrashedAt, nil
+}
+
+// ClearTrashedAt clears the value of the "trashed_at" field.
+func (m *EntryMutation) ClearTrashedAt() {
+	m.trashed_at = nil
+	m.clearedFields[entry.FieldTrashedAt] = struct{}{}
+}
+
+// TrashedAtCleared returns if the "trashed_at" field was cleared in this mutation.
+func (m *EntryMutation) TrashedAtCleared() bool {
+	_, ok := m.clearedFields[entry.FieldTrashedAt]
+	return ok
+}
+
+// ResetTrashedAt resets all changes to the "trashed_at" field.
+func (m *EntryMutation) ResetTrashedAt() {
+	m.trashed_at = nil
+	delete(m.clearedFields, entry.FieldTrashedAt)
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (m *EntryMutation) SetExpiredAt(t time.Time) {
+	m.expired_at = &t
+}
+
+// ExpiredAt returns the value of the "expired_at" field in the mutation.
+func (m *EntryMutation) ExpiredAt() (r time.Time, exists bool) {
+	v := m.expired_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiredAt returns the old "expired_at" field's value of the Entry entity.
+// If the Entry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *EntryMutation) OldExpiredAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiredAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiredAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiredAt: %w", err)
+	}
+	return oldValue.ExpiredAt, nil
+}
+
+// ClearExpiredAt clears the value of the "expired_at" field.
+func (m *EntryMutation) ClearExpiredAt() {
+	m.expired_at = nil
+	m.clearedFields[entry.FieldExpiredAt] = struct{}{}
+}
+
+// ExpiredAtCleared returns if the "expired_at" field was cleared in this mutation.
+func (m *EntryMutation) ExpiredAtCleared() bool {
+	_, ok := m.clearedFields[entry.FieldExpiredAt]
+	return ok
+}
+
+// ResetExpiredAt resets all changes to the "expired_at" field.
+func (m *EntryMutation) ResetExpiredAt() {
+	m.expired_at = nil
+	delete(m.clearedFields, entry.FieldExpiredAt)
+}
+
 // SetRevisionID sets the "revision_id" field.
 func (m *EntryMutation) SetRevisionID(s string) {
 	m.revision_id = &s
@@ -1206,7 +1356,7 @@ func (m *EntryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *EntryMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 16)
 	if m.drive_id != nil {
 		fields = append(fields, entry.FieldDriveID)
 	}
@@ -1233,6 +1383,15 @@ func (m *EntryMutation) Fields() []string {
 	}
 	if m.upload_id != nil {
 		fields = append(fields, entry.FieldUploadID)
+	}
+	if m.trashed_parent_file_id != nil {
+		fields = append(fields, entry.FieldTrashedParentFileID)
+	}
+	if m.trashed_at != nil {
+		fields = append(fields, entry.FieldTrashedAt)
+	}
+	if m.expired_at != nil {
+		fields = append(fields, entry.FieldExpiredAt)
 	}
 	if m.revision_id != nil {
 		fields = append(fields, entry.FieldRevisionID)
@@ -1272,6 +1431,12 @@ func (m *EntryMutation) Field(name string) (ent.Value, bool) {
 		return m.PreHash()
 	case entry.FieldUploadID:
 		return m.UploadID()
+	case entry.FieldTrashedParentFileID:
+		return m.TrashedParentFileID()
+	case entry.FieldTrashedAt:
+		return m.TrashedAt()
+	case entry.FieldExpiredAt:
+		return m.ExpiredAt()
 	case entry.FieldRevisionID:
 		return m.RevisionID()
 	case entry.FieldEncryptMode:
@@ -1307,6 +1472,12 @@ func (m *EntryMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldPreHash(ctx)
 	case entry.FieldUploadID:
 		return m.OldUploadID(ctx)
+	case entry.FieldTrashedParentFileID:
+		return m.OldTrashedParentFileID(ctx)
+	case entry.FieldTrashedAt:
+		return m.OldTrashedAt(ctx)
+	case entry.FieldExpiredAt:
+		return m.OldExpiredAt(ctx)
 	case entry.FieldRevisionID:
 		return m.OldRevisionID(ctx)
 	case entry.FieldEncryptMode:
@@ -1386,6 +1557,27 @@ func (m *EntryMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUploadID(v)
+		return nil
+	case entry.FieldTrashedParentFileID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTrashedParentFileID(v)
+		return nil
+	case entry.FieldTrashedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTrashedAt(v)
+		return nil
+	case entry.FieldExpiredAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiredAt(v)
 		return nil
 	case entry.FieldRevisionID:
 		v, ok := value.(string)
@@ -1469,6 +1661,15 @@ func (m *EntryMutation) ClearedFields() []string {
 	if m.FieldCleared(entry.FieldUploadID) {
 		fields = append(fields, entry.FieldUploadID)
 	}
+	if m.FieldCleared(entry.FieldTrashedParentFileID) {
+		fields = append(fields, entry.FieldTrashedParentFileID)
+	}
+	if m.FieldCleared(entry.FieldTrashedAt) {
+		fields = append(fields, entry.FieldTrashedAt)
+	}
+	if m.FieldCleared(entry.FieldExpiredAt) {
+		fields = append(fields, entry.FieldExpiredAt)
+	}
 	return fields
 }
 
@@ -1491,6 +1692,15 @@ func (m *EntryMutation) ClearField(name string) error {
 		return nil
 	case entry.FieldUploadID:
 		m.ClearUploadID()
+		return nil
+	case entry.FieldTrashedParentFileID:
+		m.ClearTrashedParentFileID()
+		return nil
+	case entry.FieldTrashedAt:
+		m.ClearTrashedAt()
+		return nil
+	case entry.FieldExpiredAt:
+		m.ClearExpiredAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Entry nullable field %s", name)
@@ -1526,6 +1736,15 @@ func (m *EntryMutation) ResetField(name string) error {
 		return nil
 	case entry.FieldUploadID:
 		m.ResetUploadID()
+		return nil
+	case entry.FieldTrashedParentFileID:
+		m.ResetTrashedParentFileID()
+		return nil
+	case entry.FieldTrashedAt:
+		m.ResetTrashedAt()
+		return nil
+	case entry.FieldExpiredAt:
+		m.ResetExpiredAt()
 		return nil
 	case entry.FieldRevisionID:
 		m.ResetRevisionID()

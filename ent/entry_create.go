@@ -116,6 +116,48 @@ func (_c *EntryCreate) SetNillableUploadID(v *string) *EntryCreate {
 	return _c
 }
 
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (_c *EntryCreate) SetTrashedParentFileID(v string) *EntryCreate {
+	_c.mutation.SetTrashedParentFileID(v)
+	return _c
+}
+
+// SetNillableTrashedParentFileID sets the "trashed_parent_file_id" field if the given value is not nil.
+func (_c *EntryCreate) SetNillableTrashedParentFileID(v *string) *EntryCreate {
+	if v != nil {
+		_c.SetTrashedParentFileID(*v)
+	}
+	return _c
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (_c *EntryCreate) SetTrashedAt(v time.Time) *EntryCreate {
+	_c.mutation.SetTrashedAt(v)
+	return _c
+}
+
+// SetNillableTrashedAt sets the "trashed_at" field if the given value is not nil.
+func (_c *EntryCreate) SetNillableTrashedAt(v *time.Time) *EntryCreate {
+	if v != nil {
+		_c.SetTrashedAt(*v)
+	}
+	return _c
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (_c *EntryCreate) SetExpiredAt(v time.Time) *EntryCreate {
+	_c.mutation.SetExpiredAt(v)
+	return _c
+}
+
+// SetNillableExpiredAt sets the "expired_at" field if the given value is not nil.
+func (_c *EntryCreate) SetNillableExpiredAt(v *time.Time) *EntryCreate {
+	if v != nil {
+		_c.SetExpiredAt(*v)
+	}
+	return _c
+}
+
 // SetRevisionID sets the "revision_id" field.
 func (_c *EntryCreate) SetRevisionID(v string) *EntryCreate {
 	_c.mutation.SetRevisionID(v)
@@ -356,6 +398,18 @@ func (_c *EntryCreate) createSpec() (*Entry, *sqlgraph.CreateSpec) {
 		_spec.SetField(entry.FieldUploadID, field.TypeString, value)
 		_node.UploadID = &value
 	}
+	if value, ok := _c.mutation.TrashedParentFileID(); ok {
+		_spec.SetField(entry.FieldTrashedParentFileID, field.TypeString, value)
+		_node.TrashedParentFileID = &value
+	}
+	if value, ok := _c.mutation.TrashedAt(); ok {
+		_spec.SetField(entry.FieldTrashedAt, field.TypeTime, value)
+		_node.TrashedAt = &value
+	}
+	if value, ok := _c.mutation.ExpiredAt(); ok {
+		_spec.SetField(entry.FieldExpiredAt, field.TypeTime, value)
+		_node.ExpiredAt = &value
+	}
 	if value, ok := _c.mutation.RevisionID(); ok {
 		_spec.SetField(entry.FieldRevisionID, field.TypeString, value)
 		_node.RevisionID = value
@@ -553,6 +607,60 @@ func (u *EntryUpsert) UpdateUploadID() *EntryUpsert {
 // ClearUploadID clears the value of the "upload_id" field.
 func (u *EntryUpsert) ClearUploadID() *EntryUpsert {
 	u.SetNull(entry.FieldUploadID)
+	return u
+}
+
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (u *EntryUpsert) SetTrashedParentFileID(v string) *EntryUpsert {
+	u.Set(entry.FieldTrashedParentFileID, v)
+	return u
+}
+
+// UpdateTrashedParentFileID sets the "trashed_parent_file_id" field to the value that was provided on create.
+func (u *EntryUpsert) UpdateTrashedParentFileID() *EntryUpsert {
+	u.SetExcluded(entry.FieldTrashedParentFileID)
+	return u
+}
+
+// ClearTrashedParentFileID clears the value of the "trashed_parent_file_id" field.
+func (u *EntryUpsert) ClearTrashedParentFileID() *EntryUpsert {
+	u.SetNull(entry.FieldTrashedParentFileID)
+	return u
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (u *EntryUpsert) SetTrashedAt(v time.Time) *EntryUpsert {
+	u.Set(entry.FieldTrashedAt, v)
+	return u
+}
+
+// UpdateTrashedAt sets the "trashed_at" field to the value that was provided on create.
+func (u *EntryUpsert) UpdateTrashedAt() *EntryUpsert {
+	u.SetExcluded(entry.FieldTrashedAt)
+	return u
+}
+
+// ClearTrashedAt clears the value of the "trashed_at" field.
+func (u *EntryUpsert) ClearTrashedAt() *EntryUpsert {
+	u.SetNull(entry.FieldTrashedAt)
+	return u
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (u *EntryUpsert) SetExpiredAt(v time.Time) *EntryUpsert {
+	u.Set(entry.FieldExpiredAt, v)
+	return u
+}
+
+// UpdateExpiredAt sets the "expired_at" field to the value that was provided on create.
+func (u *EntryUpsert) UpdateExpiredAt() *EntryUpsert {
+	u.SetExcluded(entry.FieldExpiredAt)
+	return u
+}
+
+// ClearExpiredAt clears the value of the "expired_at" field.
+func (u *EntryUpsert) ClearExpiredAt() *EntryUpsert {
+	u.SetNull(entry.FieldExpiredAt)
 	return u
 }
 
@@ -788,6 +896,69 @@ func (u *EntryUpsertOne) UpdateUploadID() *EntryUpsertOne {
 func (u *EntryUpsertOne) ClearUploadID() *EntryUpsertOne {
 	return u.Update(func(s *EntryUpsert) {
 		s.ClearUploadID()
+	})
+}
+
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (u *EntryUpsertOne) SetTrashedParentFileID(v string) *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.SetTrashedParentFileID(v)
+	})
+}
+
+// UpdateTrashedParentFileID sets the "trashed_parent_file_id" field to the value that was provided on create.
+func (u *EntryUpsertOne) UpdateTrashedParentFileID() *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.UpdateTrashedParentFileID()
+	})
+}
+
+// ClearTrashedParentFileID clears the value of the "trashed_parent_file_id" field.
+func (u *EntryUpsertOne) ClearTrashedParentFileID() *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.ClearTrashedParentFileID()
+	})
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (u *EntryUpsertOne) SetTrashedAt(v time.Time) *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.SetTrashedAt(v)
+	})
+}
+
+// UpdateTrashedAt sets the "trashed_at" field to the value that was provided on create.
+func (u *EntryUpsertOne) UpdateTrashedAt() *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.UpdateTrashedAt()
+	})
+}
+
+// ClearTrashedAt clears the value of the "trashed_at" field.
+func (u *EntryUpsertOne) ClearTrashedAt() *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.ClearTrashedAt()
+	})
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (u *EntryUpsertOne) SetExpiredAt(v time.Time) *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.SetExpiredAt(v)
+	})
+}
+
+// UpdateExpiredAt sets the "expired_at" field to the value that was provided on create.
+func (u *EntryUpsertOne) UpdateExpiredAt() *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.UpdateExpiredAt()
+	})
+}
+
+// ClearExpiredAt clears the value of the "expired_at" field.
+func (u *EntryUpsertOne) ClearExpiredAt() *EntryUpsertOne {
+	return u.Update(func(s *EntryUpsert) {
+		s.ClearExpiredAt()
 	})
 }
 
@@ -1195,6 +1366,69 @@ func (u *EntryUpsertBulk) UpdateUploadID() *EntryUpsertBulk {
 func (u *EntryUpsertBulk) ClearUploadID() *EntryUpsertBulk {
 	return u.Update(func(s *EntryUpsert) {
 		s.ClearUploadID()
+	})
+}
+
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (u *EntryUpsertBulk) SetTrashedParentFileID(v string) *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.SetTrashedParentFileID(v)
+	})
+}
+
+// UpdateTrashedParentFileID sets the "trashed_parent_file_id" field to the value that was provided on create.
+func (u *EntryUpsertBulk) UpdateTrashedParentFileID() *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.UpdateTrashedParentFileID()
+	})
+}
+
+// ClearTrashedParentFileID clears the value of the "trashed_parent_file_id" field.
+func (u *EntryUpsertBulk) ClearTrashedParentFileID() *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.ClearTrashedParentFileID()
+	})
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (u *EntryUpsertBulk) SetTrashedAt(v time.Time) *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.SetTrashedAt(v)
+	})
+}
+
+// UpdateTrashedAt sets the "trashed_at" field to the value that was provided on create.
+func (u *EntryUpsertBulk) UpdateTrashedAt() *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.UpdateTrashedAt()
+	})
+}
+
+// ClearTrashedAt clears the value of the "trashed_at" field.
+func (u *EntryUpsertBulk) ClearTrashedAt() *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.ClearTrashedAt()
+	})
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (u *EntryUpsertBulk) SetExpiredAt(v time.Time) *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.SetExpiredAt(v)
+	})
+}
+
+// UpdateExpiredAt sets the "expired_at" field to the value that was provided on create.
+func (u *EntryUpsertBulk) UpdateExpiredAt() *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.UpdateExpiredAt()
+	})
+}
+
+// ClearExpiredAt clears the value of the "expired_at" field.
+func (u *EntryUpsertBulk) ClearExpiredAt() *EntryUpsertBulk {
+	return u.Update(func(s *EntryUpsert) {
+		s.ClearExpiredAt()
 	})
 }
 

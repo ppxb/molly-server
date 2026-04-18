@@ -21,14 +21,16 @@ import (
 )
 
 const (
-	rootFolderID            = "root"
-	maxSearchLimit          = 1_000
-	defaultSearchLimit      = 100
-	defaultListLimit        = 20
-	maxListLimit            = 500
-	defaultUploadURLTTLSecs = 900
-	defaultDownloadTTLSecs  = 900
-	pendingHashPrefix       = "pending:"
+	rootFolderID                = "root"
+	recycleBinFolderID          = "recyclebin"
+	maxSearchLimit              = 1_000
+	defaultSearchLimit          = 100
+	defaultListLimit            = 20
+	maxListLimit                = 500
+	defaultUploadURLTTLSecs     = 900
+	defaultDownloadTTLSecs      = 900
+	defaultRecycleRetentionDays = 10
+	pendingHashPrefix           = "pending:"
 )
 
 var (
@@ -346,6 +348,7 @@ func (s *service) toFileGetResponse(entry repository.EntryRecord) GetFileRespons
 	if entry.Type == "file" {
 		contentType = resolveContentType("", entry.Name)
 	}
+	trashed := isInRecycleBin(entry)
 
 	return GetFileResponse{
 		DriveID:                     entry.DriveID,
@@ -370,7 +373,7 @@ func (s *service) toFileGetResponse(entry repository.EntryRecord) GetFileRespons
 		SyncFlag:                    false,
 		SyncDeviceFlag:              false,
 		SyncMeta:                    "",
-		Trashed:                     false,
+		Trashed:                     trashed,
 		DownloadURL:                 "",
 		URL:                         "",
 	}
@@ -404,6 +407,9 @@ func (s *service) GetFilePath(ctx context.Context, req GetFilePathRequest) (GetF
 			return GetFilePathResponse{}, fmt.Errorf("get file path: query path entry: %w", err)
 		}
 		pathEntries = append(pathEntries, entry)
+		if isInRecycleBin(entry) {
+			break
+		}
 		currentID = normalizeFolderID(entry.ParentFileID)
 	}
 
@@ -414,7 +420,7 @@ func (s *service) GetFilePath(ctx context.Context, req GetFilePathRequest) (GetF
 	items := make([]GetFilePathItem, 0, len(pathEntries))
 	for _, entry := range pathEntries {
 		items = append(items, GetFilePathItem{
-			Trashed:      false,
+			Trashed:      isInRecycleBin(entry),
 			DriveID:      entry.DriveID,
 			FileID:       entry.FileID,
 			CreatedAt:    toRFC3339(entry.CreatedAt),
@@ -536,6 +542,219 @@ func (s *service) List(ctx context.Context, req ListRequest) (ListResponse, erro
 		Items:      items,
 		NextMarker: "",
 	}, nil
+}
+
+func (s *service) RecycleBinTrash(ctx context.Context, req RecycleBinTrashRequest) error {
+	driveID := s.normalizeDriveID(req.DriveID)
+	if err := s.repo.EnsureDrive(ctx, driveID); err != nil {
+		return fmt.Errorf("recyclebin trash: ensure drive: %w", err)
+	}
+
+	fileID := strings.TrimSpace(req.FileID)
+	if fileID == "" {
+		return fmt.Errorf("%w: file_id is required", ErrInvalidArgument)
+	}
+	if fileID == rootFolderID {
+		return fmt.Errorf("%w: root folder cannot be moved to recycle bin", ErrInvalidArgument)
+	}
+
+	entry, err := s.repo.GetEntryByFileID(ctx, driveID, fileID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("%w: file not found", ErrNotFound)
+		}
+		return fmt.Errorf("recyclebin trash: query file: %w", err)
+	}
+	if isInRecycleBin(entry) {
+		return nil
+	}
+
+	resolvedName, err := s.resolveEntryName(ctx, driveID, recycleBinFolderID, entry.Name, "auto_rename")
+	if err != nil {
+		return err
+	}
+
+	trashedAt := time.Now().UTC()
+	expiredAt := trashedAt.Add(s.recycleRetention())
+	if _, err := s.repo.TrashEntry(
+		ctx,
+		driveID,
+		fileID,
+		resolvedName,
+		recycleBinFolderID,
+		normalizeFolderID(entry.ParentFileID),
+		trashedAt,
+		expiredAt,
+	); err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("%w: file not found", ErrNotFound)
+		}
+		if err == repository.ErrConflict {
+			return fmt.Errorf("%w: recycle bin already has an item with the same name", ErrConflict)
+		}
+		return fmt.Errorf("recyclebin trash: move to recycle bin: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) RecycleBinList(ctx context.Context, req RecycleBinListRequest) (RecycleBinListResponse, error) {
+	driveID := s.normalizeDriveID(req.DriveID)
+	if err := s.repo.EnsureDrive(ctx, driveID); err != nil {
+		return RecycleBinListResponse{}, fmt.Errorf("recyclebin list: ensure drive: %w", err)
+	}
+
+	entries, err := s.repo.ListEntries(ctx, repository.ListEntriesParams{
+		DriveID:        driveID,
+		ParentFileID:   recycleBinFolderID,
+		Limit:          sanitizeLimit(req.Limit, defaultListLimit, maxListLimit),
+		OrderBy:        req.OrderBy,
+		OrderDirection: req.OrderDirection,
+	})
+	if err != nil {
+		return RecycleBinListResponse{}, fmt.Errorf("recyclebin list: query entries: %w", err)
+	}
+
+	items := make([]RecycleBinListItem, 0, len(entries))
+	for _, entry := range entries {
+		trashedAt := toRFC3339Ptr(entry.TrashedAt)
+		if trashedAt == "" {
+			trashedAt = toRFC3339(entry.UpdatedAt)
+		}
+
+		gmtExpired := toRFC3339Ptr(entry.ExpiredAt)
+		if gmtExpired == "" {
+			gmtExpired = toRFC3339(entry.UpdatedAt.Add(s.recycleRetention()))
+		}
+
+		item := RecycleBinListItem{
+			Name:         entry.Name,
+			Type:         entry.Type,
+			Hidden:       false,
+			Status:       "available",
+			Starred:      false,
+			ParentFileID: recycleBinFolderID,
+			DriveID:      entry.DriveID,
+			FileID:       entry.FileID,
+			EncryptMode:  entry.EncryptMode,
+			DomainID:     s.uploadCfg.DomainID,
+			CreatedAt:    toRFC3339(entry.CreatedAt),
+			UpdatedAt:    toRFC3339(entry.UpdatedAt),
+			TrashedAt:    trashedAt,
+			GMTExpired:   gmtExpired,
+		}
+
+		if entry.Type == "file" {
+			contentType := resolveContentType("", entry.Name)
+			_, ext := splitName(entry.Name)
+			item.Category = categoryFromMime(contentType)
+			item.URL = ""
+			item.Size = entry.Size
+			item.FileExtension = strings.TrimPrefix(strings.ToLower(ext), ".")
+			item.ContentHash = entry.ContentHash
+			if item.ContentHash != "" && !strings.HasPrefix(item.ContentHash, pendingHashPrefix) {
+				item.ContentHashName = "sha256"
+			}
+			item.PunishFlag = 0
+		}
+
+		items = append(items, item)
+	}
+
+	return RecycleBinListResponse{
+		Items:      items,
+		NextMarker: "",
+	}, nil
+}
+
+func (s *service) RecycleBinRestore(ctx context.Context, req RecycleBinRestoreRequest) error {
+	driveID := s.normalizeDriveID(req.DriveID)
+	if err := s.repo.EnsureDrive(ctx, driveID); err != nil {
+		return fmt.Errorf("recyclebin restore: ensure drive: %w", err)
+	}
+
+	fileID := strings.TrimSpace(req.FileID)
+	if fileID == "" {
+		return fmt.Errorf("%w: file_id is required", ErrInvalidArgument)
+	}
+
+	entry, err := s.repo.GetEntryByFileID(ctx, driveID, fileID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("%w: file not found", ErrNotFound)
+		}
+		return fmt.Errorf("recyclebin restore: query file: %w", err)
+	}
+	if !isInRecycleBin(entry) {
+		return fmt.Errorf("%w: file is not in recycle bin", ErrInvalidArgument)
+	}
+
+	targetParentID := normalizeFolderID(entry.TrashedParentFileID)
+	if targetParentID == recycleBinFolderID {
+		targetParentID = rootFolderID
+	}
+	if targetParentID != rootFolderID {
+		targetParent, err := s.repo.GetEntryByFileID(ctx, driveID, targetParentID)
+		if err != nil {
+			if err != repository.ErrNotFound {
+				return fmt.Errorf("recyclebin restore: query target parent: %w", err)
+			}
+			targetParentID = rootFolderID
+		} else if targetParent.Type != "folder" || isInRecycleBin(targetParent) {
+			targetParentID = rootFolderID
+		}
+	}
+
+	resolvedName, err := s.resolveEntryName(ctx, driveID, targetParentID, entry.Name, "auto_rename")
+	if err != nil {
+		return err
+	}
+
+	if _, err := s.repo.RestoreEntry(ctx, driveID, fileID, resolvedName, targetParentID); err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("%w: file not found", ErrNotFound)
+		}
+		if err == repository.ErrConflict {
+			return fmt.Errorf("%w: target folder already has a file or folder with the same name", ErrConflict)
+		}
+		return fmt.Errorf("recyclebin restore: restore entry: %w", err)
+	}
+
+	return nil
+}
+
+func (s *service) DeleteFile(ctx context.Context, req DeleteFileRequest) error {
+	driveID := s.normalizeDriveID(req.DriveID)
+	if err := s.repo.EnsureDrive(ctx, driveID); err != nil {
+		return fmt.Errorf("file delete: ensure drive: %w", err)
+	}
+
+	fileID := strings.TrimSpace(req.FileID)
+	if fileID == "" {
+		return fmt.Errorf("%w: file_id is required", ErrInvalidArgument)
+	}
+	if fileID == rootFolderID {
+		return fmt.Errorf("%w: root folder cannot be deleted", ErrInvalidArgument)
+	}
+
+	entry, err := s.repo.GetEntryByFileID(ctx, driveID, fileID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("%w: file not found", ErrNotFound)
+		}
+		return fmt.Errorf("file delete: query file: %w", err)
+	}
+	if !isInRecycleBin(entry) {
+		return fmt.Errorf("%w: file is not in recycle bin", ErrInvalidArgument)
+	}
+
+	if err := s.repo.DeleteEntryTree(ctx, driveID, fileID); err != nil {
+		if err == repository.ErrNotFound {
+			return fmt.Errorf("%w: file not found", ErrNotFound)
+		}
+		return fmt.Errorf("file delete: delete entry tree: %w", err)
+	}
+	return nil
 }
 
 func (s *service) ListMoveTargets(ctx context.Context, req ListMoveTargetsRequest) (ListMoveTargetsResponse, error) {
@@ -1205,6 +1424,34 @@ func (s *service) loadFolderNodes(ctx context.Context, driveID string) (map[stri
 		return nil, fmt.Errorf("load folder nodes: query folders: %w", err)
 	}
 
+	folderByID := make(map[string]repository.EntryRecord, len(folderEntries))
+	for _, folder := range folderEntries {
+		folderByID[folder.FileID] = folder
+	}
+
+	isUnderRecycle := func(fileID string) bool {
+		currentID := strings.TrimSpace(fileID)
+		visited := make(map[string]struct{}, 8)
+		for currentID != "" && currentID != rootFolderID {
+			if _, ok := visited[currentID]; ok {
+				return false
+			}
+			visited[currentID] = struct{}{}
+
+			current, ok := folderByID[currentID]
+			if !ok {
+				return false
+			}
+
+			parentID := normalizeFolderID(current.ParentFileID)
+			if parentID == recycleBinFolderID {
+				return true
+			}
+			currentID = parentID
+		}
+		return false
+	}
+
 	nodes := map[string]*folderNode{
 		rootFolderID: {
 			ID:        rootFolderID,
@@ -1217,6 +1464,10 @@ func (s *service) loadFolderNodes(ctx context.Context, driveID string) (map[stri
 	}
 
 	for _, folder := range folderEntries {
+		if isUnderRecycle(folder.FileID) {
+			continue
+		}
+
 		nodes[folder.FileID] = &folderNode{
 			ID:        folder.FileID,
 			Name:      folder.Name,
@@ -1282,6 +1533,14 @@ func (s *service) downloadURLTTL() time.Duration {
 	return time.Duration(ttl) * time.Second
 }
 
+func (s *service) recycleRetention() time.Duration {
+	days := s.uploadCfg.RecycleRetentionDays
+	if days <= 0 {
+		days = defaultRecycleRetentionDays
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
+
 func (s *service) normalizeDriveID(driveID string) string {
 	trimmed := strings.TrimSpace(driveID)
 	if trimmed != "" {
@@ -1300,6 +1559,10 @@ func normalizeFolderID(folderID string) string {
 		return rootFolderID
 	}
 	return trimmed
+}
+
+func isInRecycleBin(entry repository.EntryRecord) bool {
+	return normalizeFolderID(entry.ParentFileID) == recycleBinFolderID
 }
 
 func parseSearchQuery(query string) (parentFileID string, name string, err error) {
@@ -1404,6 +1667,13 @@ func toRFC3339(value time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func toRFC3339Ptr(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return toRFC3339(*value)
 }
 
 func newHexID(length int) string {

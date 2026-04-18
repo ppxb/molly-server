@@ -35,6 +35,12 @@ type Entry struct {
 	PreHash *string `json:"pre_hash,omitempty"`
 	// UploadID holds the value of the "upload_id" field.
 	UploadID *string `json:"upload_id,omitempty"`
+	// TrashedParentFileID holds the value of the "trashed_parent_file_id" field.
+	TrashedParentFileID *string `json:"trashed_parent_file_id,omitempty"`
+	// TrashedAt holds the value of the "trashed_at" field.
+	TrashedAt *time.Time `json:"trashed_at,omitempty"`
+	// ExpiredAt holds the value of the "expired_at" field.
+	ExpiredAt *time.Time `json:"expired_at,omitempty"`
 	// RevisionID holds the value of the "revision_id" field.
 	RevisionID string `json:"revision_id,omitempty"`
 	// EncryptMode holds the value of the "encrypt_mode" field.
@@ -53,9 +59,9 @@ func (*Entry) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case entry.FieldID, entry.FieldSize:
 			values[i] = new(sql.NullInt64)
-		case entry.FieldDriveID, entry.FieldFileID, entry.FieldParentFileID, entry.FieldName, entry.FieldType, entry.FieldContentHash, entry.FieldPreHash, entry.FieldUploadID, entry.FieldRevisionID, entry.FieldEncryptMode:
+		case entry.FieldDriveID, entry.FieldFileID, entry.FieldParentFileID, entry.FieldName, entry.FieldType, entry.FieldContentHash, entry.FieldPreHash, entry.FieldUploadID, entry.FieldTrashedParentFileID, entry.FieldRevisionID, entry.FieldEncryptMode:
 			values[i] = new(sql.NullString)
-		case entry.FieldCreatedAt, entry.FieldUpdatedAt:
+		case entry.FieldTrashedAt, entry.FieldExpiredAt, entry.FieldCreatedAt, entry.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -134,6 +140,27 @@ func (_m *Entry) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UploadID = new(string)
 				*_m.UploadID = value.String
+			}
+		case entry.FieldTrashedParentFileID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field trashed_parent_file_id", values[i])
+			} else if value.Valid {
+				_m.TrashedParentFileID = new(string)
+				*_m.TrashedParentFileID = value.String
+			}
+		case entry.FieldTrashedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field trashed_at", values[i])
+			} else if value.Valid {
+				_m.TrashedAt = new(time.Time)
+				*_m.TrashedAt = value.Time
+			}
+		case entry.FieldExpiredAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field expired_at", values[i])
+			} else if value.Valid {
+				_m.ExpiredAt = new(time.Time)
+				*_m.ExpiredAt = value.Time
 			}
 		case entry.FieldRevisionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -226,6 +253,21 @@ func (_m *Entry) String() string {
 	if v := _m.UploadID; v != nil {
 		builder.WriteString("upload_id=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TrashedParentFileID; v != nil {
+		builder.WriteString("trashed_parent_file_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TrashedAt; v != nil {
+		builder.WriteString("trashed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.ExpiredAt; v != nil {
+		builder.WriteString("expired_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("revision_id=")

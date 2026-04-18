@@ -41,19 +41,22 @@ type ListEntriesParams struct {
 }
 
 type EntryRecord struct {
-	DriveID      string
-	FileID       string
-	ParentFileID string
-	Name         string
-	Type         string
-	Size         int64
-	ContentHash  string
-	PreHash      string
-	UploadID     string
-	RevisionID   string
-	EncryptMode  string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	DriveID             string
+	FileID              string
+	ParentFileID        string
+	Name                string
+	Type                string
+	Size                int64
+	ContentHash         string
+	PreHash             string
+	UploadID            string
+	TrashedParentFileID string
+	RevisionID          string
+	EncryptMode         string
+	TrashedAt           *time.Time
+	ExpiredAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type CreateFolderParams struct {
@@ -380,6 +383,130 @@ func (r *Repository) MoveEntry(ctx context.Context, driveID, fileID, targetParen
 	return r.GetEntryByFileID(ctx, driveID, fileID)
 }
 
+func (r *Repository) TrashEntry(
+	ctx context.Context,
+	driveID string,
+	fileID string,
+	name string,
+	recycleBinParentID string,
+	trashedParentFileID string,
+	trashedAt time.Time,
+	expiredAt time.Time,
+) (EntryRecord, error) {
+	record, err := r.client.Entry.Update().
+		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
+		SetName(name).
+		SetParentFileID(recycleBinParentID).
+		SetTrashedParentFileID(trashedParentFileID).
+		SetTrashedAt(trashedAt).
+		SetExpiredAt(expiredAt).
+		Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return EntryRecord{}, ErrConflict
+		}
+		return EntryRecord{}, fmt.Errorf("trash entry: %w", err)
+	}
+	if record != 1 {
+		return EntryRecord{}, ErrNotFound
+	}
+	return r.GetEntryByFileID(ctx, driveID, fileID)
+}
+
+func (r *Repository) RestoreEntry(
+	ctx context.Context,
+	driveID string,
+	fileID string,
+	name string,
+	parentFileID string,
+) (EntryRecord, error) {
+	record, err := r.client.Entry.Update().
+		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
+		SetName(name).
+		SetParentFileID(parentFileID).
+		ClearTrashedParentFileID().
+		ClearTrashedAt().
+		ClearExpiredAt().
+		Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return EntryRecord{}, ErrConflict
+		}
+		return EntryRecord{}, fmt.Errorf("restore entry: %w", err)
+	}
+	if record != 1 {
+		return EntryRecord{}, ErrNotFound
+	}
+	return r.GetEntryByFileID(ctx, driveID, fileID)
+}
+
+func (r *Repository) DeleteEntryTree(ctx context.Context, driveID, fileID string) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("delete entry tree: open transaction: %w", err)
+	}
+
+	entryIDs, err := r.queryDescendantFileIDs(ctx, tx, driveID, fileID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if len(entryIDs) == 0 {
+		_ = tx.Rollback()
+		return ErrNotFound
+	}
+
+	entryRecords, err := tx.Entry.Query().
+		Where(entry.DriveIDEQ(driveID), entry.FileIDIn(entryIDs...)).
+		All(ctx)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete entry tree: query tree entries: %w", err)
+	}
+	if len(entryRecords) == 0 {
+		_ = tx.Rollback()
+		return ErrNotFound
+	}
+
+	uploadIDSet := make(map[string]struct{}, len(entryRecords))
+	for _, entryRecord := range entryRecords {
+		if entryRecord.UploadID == nil {
+			continue
+		}
+		uploadID := strings.TrimSpace(*entryRecord.UploadID)
+		if uploadID == "" {
+			continue
+		}
+		uploadIDSet[uploadID] = struct{}{}
+	}
+
+	if len(uploadIDSet) > 0 {
+		uploadIDs := make([]string, 0, len(uploadIDSet))
+		for uploadID := range uploadIDSet {
+			uploadIDs = append(uploadIDs, uploadID)
+		}
+
+		if _, err := tx.UploadPart.Delete().Where(uploadpart.UploadIDIn(uploadIDs...)).Exec(ctx); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("delete entry tree: delete upload parts: %w", err)
+		}
+		if _, err := tx.UploadSession.Delete().Where(uploadsession.UploadIDIn(uploadIDs...)).Exec(ctx); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("delete entry tree: delete upload sessions: %w", err)
+		}
+	}
+
+	if _, err := tx.Entry.Delete().Where(entry.DriveIDEQ(driveID), entry.FileIDIn(entryIDs...)).Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete entry tree: delete entries: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete entry tree: commit transaction: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) UpdateEntryHash(ctx context.Context, driveID, fileID, contentHash string) (EntryRecord, error) {
 	record, err := r.client.Entry.Update().
 		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
@@ -513,6 +640,48 @@ func (r *Repository) SetUploadSessionStatus(ctx context.Context, uploadID, statu
 	return nil
 }
 
+func (r *Repository) queryDescendantFileIDs(
+	ctx context.Context,
+	tx *ent.Tx,
+	driveID string,
+	rootFileID string,
+) ([]string, error) {
+	rootFileID = strings.TrimSpace(rootFileID)
+	if rootFileID == "" {
+		return nil, fmt.Errorf("delete entry tree: empty file_id")
+	}
+
+	ids := []string{rootFileID}
+	seen := map[string]struct{}{
+		rootFileID: {},
+	}
+	queue := []string{rootFileID}
+
+	for len(queue) > 0 {
+		parentID := queue[0]
+		queue = queue[1:]
+
+		children, err := tx.Entry.Query().
+			Where(entry.DriveIDEQ(driveID), entry.ParentFileIDEQ(parentID)).
+			Select(entry.FieldFileID).
+			Strings(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete entry tree: query child entries: %w", err)
+		}
+
+		for _, childID := range children {
+			if _, ok := seen[childID]; ok {
+				continue
+			}
+			seen[childID] = struct{}{}
+			ids = append(ids, childID)
+			queue = append(queue, childID)
+		}
+	}
+
+	return ids, nil
+}
+
 func mapEntryRecord(record *ent.Entry) EntryRecord {
 	contentHash := ""
 	if record.ContentHash != nil {
@@ -526,21 +695,28 @@ func mapEntryRecord(record *ent.Entry) EntryRecord {
 	if record.UploadID != nil {
 		uploadID = *record.UploadID
 	}
+	trashedParentFileID := ""
+	if record.TrashedParentFileID != nil {
+		trashedParentFileID = *record.TrashedParentFileID
+	}
 
 	return EntryRecord{
-		DriveID:      record.DriveID,
-		FileID:       record.FileID,
-		ParentFileID: record.ParentFileID,
-		Name:         record.Name,
-		Type:         string(record.Type),
-		Size:         record.Size,
-		ContentHash:  contentHash,
-		PreHash:      preHash,
-		UploadID:     uploadID,
-		RevisionID:   record.RevisionID,
-		EncryptMode:  record.EncryptMode,
-		CreatedAt:    record.CreatedAt,
-		UpdatedAt:    record.UpdatedAt,
+		DriveID:             record.DriveID,
+		FileID:              record.FileID,
+		ParentFileID:        record.ParentFileID,
+		Name:                record.Name,
+		Type:                string(record.Type),
+		Size:                record.Size,
+		ContentHash:         contentHash,
+		PreHash:             preHash,
+		UploadID:            uploadID,
+		TrashedParentFileID: trashedParentFileID,
+		RevisionID:          record.RevisionID,
+		EncryptMode:         record.EncryptMode,
+		TrashedAt:           record.TrashedAt,
+		ExpiredAt:           record.ExpiredAt,
+		CreatedAt:           record.CreatedAt,
+		UpdatedAt:           record.UpdatedAt,
 	}
 }
 

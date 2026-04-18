@@ -55,11 +55,12 @@ type RateLimitConfig struct {
 }
 
 type UploadConfig struct {
-	DomainID           string `mapstructure:"domain_id"`
-	Location           string `mapstructure:"location"`
-	DefaultDriveID     string `mapstructure:"default_drive_id"`
-	UploadURLTTLSecs   int    `mapstructure:"upload_url_ttl_secs"`
-	DownloadURLTTLSecs int    `mapstructure:"download_url_ttl_secs"`
+	DomainID             string `mapstructure:"domain_id"`
+	Location             string `mapstructure:"location"`
+	DefaultDriveID       string `mapstructure:"default_drive_id"`
+	UploadURLTTLSecs     int    `mapstructure:"upload_url_ttl_secs"`
+	DownloadURLTTLSecs   int    `mapstructure:"download_url_ttl_secs"`
+	RecycleRetentionDays int    `mapstructure:"recycle_retention_days"`
 }
 
 type ObjectStorageConfig struct {

@@ -19,6 +19,10 @@ type Service interface {
 	GetFilePath(ctx context.Context, req GetFilePathRequest) (GetFilePathResponse, error)
 	CompleteFile(ctx context.Context, req CompleteFileRequest) (CompleteFileResponse, error)
 	List(ctx context.Context, req ListRequest) (ListResponse, error)
+	RecycleBinTrash(ctx context.Context, req RecycleBinTrashRequest) error
+	RecycleBinList(ctx context.Context, req RecycleBinListRequest) (RecycleBinListResponse, error)
+	RecycleBinRestore(ctx context.Context, req RecycleBinRestoreRequest) error
+	DeleteFile(ctx context.Context, req DeleteFileRequest) error
 	Update(ctx context.Context, req UpdateRequest) (UpdateResponse, error)
 	GetLatestAsyncTask(ctx context.Context, req GetLatestAsyncTaskRequest) (GetLatestAsyncTaskResponse, error)
 	ListMoveTargets(ctx context.Context, req ListMoveTargetsRequest) (ListMoveTargetsResponse, error)
@@ -255,6 +259,58 @@ type ListItem struct {
 type ListResponse struct {
 	Items      []ListItem
 	NextMarker string
+}
+
+type RecycleBinTrashRequest struct {
+	DriveID string
+	FileID  string
+}
+
+type RecycleBinListRequest struct {
+	DriveID        string
+	Limit          int
+	OrderBy        string
+	OrderDirection string
+	Marker         string
+}
+
+type RecycleBinListItem struct {
+	Name            string
+	Type            string
+	Hidden          bool
+	Status          string
+	Starred         bool
+	ParentFileID    string
+	DriveID         string
+	FileID          string
+	EncryptMode     string
+	DomainID        string
+	CreatedAt       string
+	UpdatedAt       string
+	TrashedAt       string
+	GMTExpired      string
+	Category        string
+	URL             string
+	Size            int64
+	FileExtension   string
+	ContentHash     string
+	ContentHashName string
+	PunishFlag      int
+}
+
+type RecycleBinListResponse struct {
+	Items      []RecycleBinListItem
+	NextMarker string
+}
+
+type RecycleBinRestoreRequest struct {
+	DriveID string
+	FileID  string
+}
+
+type DeleteFileRequest struct {
+	DriveID string
+	FileID  string
 }
 
 type UploadFolderRecord struct {

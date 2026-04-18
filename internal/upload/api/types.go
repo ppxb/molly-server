@@ -291,6 +291,58 @@ type fileGetLatestAsyncTaskResponse struct {
 	TotalConsumedProcess int64 `json:"total_consumed_process"`
 }
 
+type recycleBinTrashRequest struct {
+	DriveID string `json:"drive_id"`
+	FileID  string `json:"file_id" binding:"required"`
+}
+
+type recycleBinRestoreRequest struct {
+	DriveID string `json:"drive_id"`
+	FileID  string `json:"file_id" binding:"required"`
+}
+
+type fileDeleteRequest struct {
+	DriveID string `json:"drive_id"`
+	FileID  string `json:"file_id" binding:"required"`
+}
+
+type recycleBinListRequest struct {
+	DriveID        string `json:"drive_id"`
+	Limit          int    `json:"limit"`
+	OrderBy        string `json:"order_by"`
+	OrderDirection string `json:"order_direction"`
+	Marker         string `json:"marker"`
+}
+
+type recycleBinListItem struct {
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Hidden          bool   `json:"hidden"`
+	Status          string `json:"status"`
+	Starred         bool   `json:"starred"`
+	ParentFileID    string `json:"parent_file_id"`
+	DriveID         string `json:"drive_id"`
+	FileID          string `json:"file_id"`
+	EncryptMode     string `json:"encrypt_mode"`
+	DomainID        string `json:"domain_id"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
+	TrashedAt       string `json:"trashed_at"`
+	GMTExpired      string `json:"gmt_expired"`
+	Category        string `json:"category,omitempty"`
+	URL             string `json:"url,omitempty"`
+	Size            int64  `json:"size,omitempty"`
+	FileExtension   string `json:"file_extension,omitempty"`
+	ContentHash     string `json:"content_hash,omitempty"`
+	ContentHashName string `json:"content_hash_name,omitempty"`
+	PunishFlag      int    `json:"punish_flag,omitempty"`
+}
+
+type recycleBinListResponse struct {
+	Items      []recycleBinListItem `json:"items"`
+	NextMarker string               `json:"next_marker"`
+}
+
 type uploadBatchRequestItem struct {
 	ID      string            `json:"id"`
 	Method  string            `json:"method"`

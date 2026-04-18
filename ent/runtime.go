@@ -64,21 +64,21 @@ func init() {
 	// entry.SizeValidator is a validator for the "size" field. It is called by the builders before save.
 	entry.SizeValidator = entryDescSize.Validators[0].(func(int64) error)
 	// entryDescRevisionID is the schema descriptor for revision_id field.
-	entryDescRevisionID := entryFields[9].Descriptor()
+	entryDescRevisionID := entryFields[12].Descriptor()
 	// entry.RevisionIDValidator is a validator for the "revision_id" field. It is called by the builders before save.
 	entry.RevisionIDValidator = entryDescRevisionID.Validators[0].(func(string) error)
 	// entryDescEncryptMode is the schema descriptor for encrypt_mode field.
-	entryDescEncryptMode := entryFields[10].Descriptor()
+	entryDescEncryptMode := entryFields[13].Descriptor()
 	// entry.DefaultEncryptMode holds the default value on creation for the encrypt_mode field.
 	entry.DefaultEncryptMode = entryDescEncryptMode.Default.(string)
 	// entry.EncryptModeValidator is a validator for the "encrypt_mode" field. It is called by the builders before save.
 	entry.EncryptModeValidator = entryDescEncryptMode.Validators[0].(func(string) error)
 	// entryDescCreatedAt is the schema descriptor for created_at field.
-	entryDescCreatedAt := entryFields[11].Descriptor()
+	entryDescCreatedAt := entryFields[14].Descriptor()
 	// entry.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entry.DefaultCreatedAt = entryDescCreatedAt.Default.(func() time.Time)
 	// entryDescUpdatedAt is the schema descriptor for updated_at field.
-	entryDescUpdatedAt := entryFields[12].Descriptor()
+	entryDescUpdatedAt := entryFields[15].Descriptor()
 	// entry.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entry.DefaultUpdatedAt = entryDescUpdatedAt.Default.(func() time.Time)
 	// entry.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

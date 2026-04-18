@@ -179,6 +179,66 @@ func (_u *EntryUpdate) ClearUploadID() *EntryUpdate {
 	return _u
 }
 
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (_u *EntryUpdate) SetTrashedParentFileID(v string) *EntryUpdate {
+	_u.mutation.SetTrashedParentFileID(v)
+	return _u
+}
+
+// SetNillableTrashedParentFileID sets the "trashed_parent_file_id" field if the given value is not nil.
+func (_u *EntryUpdate) SetNillableTrashedParentFileID(v *string) *EntryUpdate {
+	if v != nil {
+		_u.SetTrashedParentFileID(*v)
+	}
+	return _u
+}
+
+// ClearTrashedParentFileID clears the value of the "trashed_parent_file_id" field.
+func (_u *EntryUpdate) ClearTrashedParentFileID() *EntryUpdate {
+	_u.mutation.ClearTrashedParentFileID()
+	return _u
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (_u *EntryUpdate) SetTrashedAt(v time.Time) *EntryUpdate {
+	_u.mutation.SetTrashedAt(v)
+	return _u
+}
+
+// SetNillableTrashedAt sets the "trashed_at" field if the given value is not nil.
+func (_u *EntryUpdate) SetNillableTrashedAt(v *time.Time) *EntryUpdate {
+	if v != nil {
+		_u.SetTrashedAt(*v)
+	}
+	return _u
+}
+
+// ClearTrashedAt clears the value of the "trashed_at" field.
+func (_u *EntryUpdate) ClearTrashedAt() *EntryUpdate {
+	_u.mutation.ClearTrashedAt()
+	return _u
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (_u *EntryUpdate) SetExpiredAt(v time.Time) *EntryUpdate {
+	_u.mutation.SetExpiredAt(v)
+	return _u
+}
+
+// SetNillableExpiredAt sets the "expired_at" field if the given value is not nil.
+func (_u *EntryUpdate) SetNillableExpiredAt(v *time.Time) *EntryUpdate {
+	if v != nil {
+		_u.SetExpiredAt(*v)
+	}
+	return _u
+}
+
+// ClearExpiredAt clears the value of the "expired_at" field.
+func (_u *EntryUpdate) ClearExpiredAt() *EntryUpdate {
+	_u.mutation.ClearExpiredAt()
+	return _u
+}
+
 // SetRevisionID sets the "revision_id" field.
 func (_u *EntryUpdate) SetRevisionID(v string) *EntryUpdate {
 	_u.mutation.SetRevisionID(v)
@@ -349,6 +409,24 @@ func (_u *EntryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.UploadIDCleared() {
 		_spec.ClearField(entry.FieldUploadID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TrashedParentFileID(); ok {
+		_spec.SetField(entry.FieldTrashedParentFileID, field.TypeString, value)
+	}
+	if _u.mutation.TrashedParentFileIDCleared() {
+		_spec.ClearField(entry.FieldTrashedParentFileID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TrashedAt(); ok {
+		_spec.SetField(entry.FieldTrashedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TrashedAtCleared() {
+		_spec.ClearField(entry.FieldTrashedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ExpiredAt(); ok {
+		_spec.SetField(entry.FieldExpiredAt, field.TypeTime, value)
+	}
+	if _u.mutation.ExpiredAtCleared() {
+		_spec.ClearField(entry.FieldExpiredAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.RevisionID(); ok {
 		_spec.SetField(entry.FieldRevisionID, field.TypeString, value)
@@ -527,6 +605,66 @@ func (_u *EntryUpdateOne) SetNillableUploadID(v *string) *EntryUpdateOne {
 // ClearUploadID clears the value of the "upload_id" field.
 func (_u *EntryUpdateOne) ClearUploadID() *EntryUpdateOne {
 	_u.mutation.ClearUploadID()
+	return _u
+}
+
+// SetTrashedParentFileID sets the "trashed_parent_file_id" field.
+func (_u *EntryUpdateOne) SetTrashedParentFileID(v string) *EntryUpdateOne {
+	_u.mutation.SetTrashedParentFileID(v)
+	return _u
+}
+
+// SetNillableTrashedParentFileID sets the "trashed_parent_file_id" field if the given value is not nil.
+func (_u *EntryUpdateOne) SetNillableTrashedParentFileID(v *string) *EntryUpdateOne {
+	if v != nil {
+		_u.SetTrashedParentFileID(*v)
+	}
+	return _u
+}
+
+// ClearTrashedParentFileID clears the value of the "trashed_parent_file_id" field.
+func (_u *EntryUpdateOne) ClearTrashedParentFileID() *EntryUpdateOne {
+	_u.mutation.ClearTrashedParentFileID()
+	return _u
+}
+
+// SetTrashedAt sets the "trashed_at" field.
+func (_u *EntryUpdateOne) SetTrashedAt(v time.Time) *EntryUpdateOne {
+	_u.mutation.SetTrashedAt(v)
+	return _u
+}
+
+// SetNillableTrashedAt sets the "trashed_at" field if the given value is not nil.
+func (_u *EntryUpdateOne) SetNillableTrashedAt(v *time.Time) *EntryUpdateOne {
+	if v != nil {
+		_u.SetTrashedAt(*v)
+	}
+	return _u
+}
+
+// ClearTrashedAt clears the value of the "trashed_at" field.
+func (_u *EntryUpdateOne) ClearTrashedAt() *EntryUpdateOne {
+	_u.mutation.ClearTrashedAt()
+	return _u
+}
+
+// SetExpiredAt sets the "expired_at" field.
+func (_u *EntryUpdateOne) SetExpiredAt(v time.Time) *EntryUpdateOne {
+	_u.mutation.SetExpiredAt(v)
+	return _u
+}
+
+// SetNillableExpiredAt sets the "expired_at" field if the given value is not nil.
+func (_u *EntryUpdateOne) SetNillableExpiredAt(v *time.Time) *EntryUpdateOne {
+	if v != nil {
+		_u.SetExpiredAt(*v)
+	}
+	return _u
+}
+
+// ClearExpiredAt clears the value of the "expired_at" field.
+func (_u *EntryUpdateOne) ClearExpiredAt() *EntryUpdateOne {
+	_u.mutation.ClearExpiredAt()
 	return _u
 }
 
@@ -730,6 +868,24 @@ func (_u *EntryUpdateOne) sqlSave(ctx context.Context) (_node *Entry, err error)
 	}
 	if _u.mutation.UploadIDCleared() {
 		_spec.ClearField(entry.FieldUploadID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TrashedParentFileID(); ok {
+		_spec.SetField(entry.FieldTrashedParentFileID, field.TypeString, value)
+	}
+	if _u.mutation.TrashedParentFileIDCleared() {
+		_spec.ClearField(entry.FieldTrashedParentFileID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TrashedAt(); ok {
+		_spec.SetField(entry.FieldTrashedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TrashedAtCleared() {
+		_spec.ClearField(entry.FieldTrashedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.ExpiredAt(); ok {
+		_spec.SetField(entry.FieldExpiredAt, field.TypeTime, value)
+	}
+	if _u.mutation.ExpiredAtCleared() {
+		_spec.ClearField(entry.FieldExpiredAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.RevisionID(); ok {
 		_spec.SetField(entry.FieldRevisionID, field.TypeString, value)

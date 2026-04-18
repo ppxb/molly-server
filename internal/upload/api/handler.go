@@ -34,9 +34,15 @@ func (h *Handler) RegisterPublicRoutes(group *gin.RouterGroup) {
 	fileGroup.POST("/get_upload_url", h.getUploadURL)
 	fileGroup.POST("/complete", h.completeFile)
 	fileGroup.POST("/update", h.updateFile)
+	fileGroup.POST("/delete", h.deleteFile)
 	fileGroup.POST("/get_latest_async_task", h.getLatestAsyncTask)
 	fileGroup.POST("/list_move_targets", h.listMoveTargets)
 	fileGroup.POST("/get_access_url", h.getFileAccessURL)
+
+	recycleBinGroup := group.Group("/recyclebin")
+	recycleBinGroup.POST("/trash", h.recycleBinTrash)
+	recycleBinGroup.POST("/list", h.recycleBinList)
+	recycleBinGroup.POST("/restore", h.recycleBinRestore)
 
 	group.POST("/batch", h.batch)
 }
@@ -454,6 +460,112 @@ func (h *Handler) getLatestAsyncTask(c *gin.Context) {
 		TotalSkippedProcess:  res.TotalSkippedProcess,
 		TotalConsumedProcess: res.TotalConsumedProcess,
 	})
+}
+
+func (h *Handler) recycleBinTrash(c *gin.Context) {
+	var req recycleBinTrashRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "InvalidParameter", fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	if err := h.service.RecycleBinTrash(c.Request.Context(), service.RecycleBinTrashRequest{
+		DriveID: req.DriveID,
+		FileID:  req.FileID,
+	}); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) recycleBinList(c *gin.Context) {
+	var req recycleBinListRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "InvalidParameter", fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	res, err := h.service.RecycleBinList(c.Request.Context(), service.RecycleBinListRequest{
+		DriveID:        req.DriveID,
+		Limit:          req.Limit,
+		OrderBy:        req.OrderBy,
+		OrderDirection: req.OrderDirection,
+		Marker:         req.Marker,
+	})
+	if err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+
+	items := make([]recycleBinListItem, 0, len(res.Items))
+	for _, item := range res.Items {
+		items = append(items, recycleBinListItem{
+			Name:            item.Name,
+			Type:            item.Type,
+			Hidden:          item.Hidden,
+			Status:          item.Status,
+			Starred:         item.Starred,
+			ParentFileID:    item.ParentFileID,
+			DriveID:         item.DriveID,
+			FileID:          item.FileID,
+			EncryptMode:     item.EncryptMode,
+			DomainID:        item.DomainID,
+			CreatedAt:       item.CreatedAt,
+			UpdatedAt:       item.UpdatedAt,
+			TrashedAt:       item.TrashedAt,
+			GMTExpired:      item.GMTExpired,
+			Category:        item.Category,
+			URL:             item.URL,
+			Size:            item.Size,
+			FileExtension:   item.FileExtension,
+			ContentHash:     item.ContentHash,
+			ContentHashName: item.ContentHashName,
+			PunishFlag:      item.PunishFlag,
+		})
+	}
+
+	response.JSON(c, http.StatusOK, recycleBinListResponse{
+		Items:      items,
+		NextMarker: res.NextMarker,
+	})
+}
+
+func (h *Handler) recycleBinRestore(c *gin.Context) {
+	var req recycleBinRestoreRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "InvalidParameter", fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	if err := h.service.RecycleBinRestore(c.Request.Context(), service.RecycleBinRestoreRequest{
+		DriveID: req.DriveID,
+		FileID:  req.FileID,
+	}); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) deleteFile(c *gin.Context) {
+	var req fileDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "InvalidParameter", fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	if err := h.service.DeleteFile(c.Request.Context(), service.DeleteFileRequest{
+		DriveID: req.DriveID,
+		FileID:  req.FileID,
+	}); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) batch(c *gin.Context) {

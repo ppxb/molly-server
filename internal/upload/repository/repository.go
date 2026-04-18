@@ -349,6 +349,21 @@ func (r *Repository) GetEntryByFileID(ctx context.Context, driveID, fileID strin
 	return mapEntryRecord(record), nil
 }
 
+func (r *Repository) GetEntryByParentAndName(ctx context.Context, driveID, parentFileID, name string) (EntryRecord, error) {
+	record, err := r.client.Entry.Query().Where(
+		entry.DriveIDEQ(driveID),
+		entry.ParentFileIDEQ(parentFileID),
+		entry.NameEQ(name),
+	).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return EntryRecord{}, ErrNotFound
+		}
+		return EntryRecord{}, fmt.Errorf("get entry by parent and name: %w", err)
+	}
+	return mapEntryRecord(record), nil
+}
+
 func (r *Repository) RenameEntry(ctx context.Context, driveID, fileID, newName string) (EntryRecord, error) {
 	record, err := r.client.Entry.Update().
 		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).

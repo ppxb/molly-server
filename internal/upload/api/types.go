@@ -42,6 +42,7 @@ type fileListRequest struct {
 type fileListItem struct {
 	Category       string            `json:"category,omitempty"`
 	ContentHash    string            `json:"content_hash,omitempty"`
+	FileExtension  string            `json:"file_extension,omitempty"`
 	CreatedAt      string            `json:"created_at"`
 	DriveID        string            `json:"drive_id"`
 	FileID         string            `json:"file_id"`

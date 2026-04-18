@@ -117,6 +117,7 @@ func (h *Handler) list(c *gin.Context) {
 		items = append(items, fileListItem{
 			Category:       item.Category,
 			ContentHash:    item.ContentHash,
+			FileExtension:  item.FileExtension,
 			CreatedAt:      item.CreatedAt,
 			DriveID:        item.DriveID,
 			FileID:         item.FileID,

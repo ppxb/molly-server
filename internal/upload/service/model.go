@@ -237,6 +237,7 @@ type ListRequest struct {
 type ListItem struct {
 	Category       string
 	ContentHash    string
+	FileExtension  string
 	CreatedAt      string
 	DriveID        string
 	FileID         string

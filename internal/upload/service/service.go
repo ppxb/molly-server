@@ -90,8 +90,16 @@ func (s *service) Search(ctx context.Context, req SearchRequest) (SearchResponse
 		return SearchResponse{}, fmt.Errorf("search: query entries: %w", err)
 	}
 
+	sessionMap, err := s.buildUploadSessionMap(ctx, driveID, entries)
+	if err != nil {
+		return SearchResponse{}, fmt.Errorf("search: query upload sessions: %w", err)
+	}
+
 	items := make([]SearchItem, 0, len(entries))
 	for _, item := range entries {
+		if !isVisibleEntry(item, sessionMap) {
+			continue
+		}
 		items = append(items, SearchItem{
 			DriveID:      item.DriveID,
 			FileID:       item.FileID,
@@ -535,6 +543,9 @@ func (s *service) List(ctx context.Context, req ListRequest) (ListResponse, erro
 
 	items := make([]ListItem, 0, len(entries))
 	for _, item := range entries {
+		if !isVisibleEntry(item, sessionMap) {
+			continue
+		}
 		items = append(items, s.toListItem(item, sessionMap[item.UploadID]))
 	}
 
@@ -821,11 +832,20 @@ func (s *service) Update(ctx context.Context, req UpdateRequest) (UpdateResponse
 	}
 
 	if current.Type == "file" {
+		nextBaseName := nextName
 		_, currentExt := splitName(current.Name)
-		_, nextExt := splitName(nextName)
-		if !strings.EqualFold(currentExt, nextExt) {
-			return UpdateResponse{}, fmt.Errorf("%w: file extension cannot be changed", ErrInvalidArgument)
+		if nextBase, providedExt := splitName(nextName); providedExt != "" {
+			if !strings.EqualFold(providedExt, currentExt) {
+				return UpdateResponse{}, fmt.Errorf("%w: file extension cannot be changed", ErrInvalidArgument)
+			}
+			nextBaseName = nextBase
 		}
+
+		nextBaseName = strings.TrimSpace(nextBaseName)
+		if nextBaseName == "" {
+			return UpdateResponse{}, fmt.Errorf("%w: file name cannot be empty", ErrInvalidArgument)
+		}
+		nextName = nextBaseName + currentExt
 	}
 
 	updated := current
@@ -1159,11 +1179,19 @@ func (s *service) resolveEntryName(
 		mode = "refuse"
 	}
 
-	exists, err := s.repo.ExistsEntry(ctx, driveID, parentFileID, normalized)
+	existing, err := s.repo.GetEntryByParentAndName(ctx, driveID, parentFileID, normalized)
+	if err == repository.ErrNotFound {
+		return normalized, nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("resolve entry name: check existing entry: %w", err)
 	}
-	if !exists {
+
+	cleaned, err := s.cleanupStaleUploadEntry(ctx, driveID, existing)
+	if err != nil {
+		return "", err
+	}
+	if cleaned {
 		return normalized, nil
 	}
 
@@ -1177,11 +1205,18 @@ func (s *service) resolveEntryName(
 	base, ext := splitName(normalized)
 	for i := 1; i <= 9_999; i++ {
 		candidate := fmt.Sprintf("%s(%d)%s", base, i, ext)
-		candidateExists, checkErr := s.repo.ExistsEntry(ctx, driveID, parentFileID, candidate)
+		existingCandidate, checkErr := s.repo.GetEntryByParentAndName(ctx, driveID, parentFileID, candidate)
+		if checkErr == repository.ErrNotFound {
+			return candidate, nil
+		}
 		if checkErr != nil {
 			return "", fmt.Errorf("resolve entry name: check renamed candidate: %w", checkErr)
 		}
-		if !candidateExists {
+		cleanedCandidate, cleanupErr := s.cleanupStaleUploadEntry(ctx, driveID, existingCandidate)
+		if cleanupErr != nil {
+			return "", cleanupErr
+		}
+		if cleanedCandidate {
 			return candidate, nil
 		}
 	}
@@ -1348,6 +1383,8 @@ func (s *service) toListItem(item repository.EntryRecord, _ repository.UploadSes
 		listItem.MimeType = contentType
 		listItem.Category = categoryFromMime(contentType)
 		listItem.ContentHash = item.ContentHash
+		_, ext := splitName(item.Name)
+		listItem.FileExtension = strings.TrimPrefix(strings.ToLower(ext), ".")
 		listItem.Size = item.Size
 		listItem.PunishFlag = 0
 	}
@@ -1751,6 +1788,71 @@ func collectUploadIDs(entries []repository.EntryRecord) []string {
 		ids = append(ids, uploadID)
 	}
 	return ids
+}
+
+func (s *service) buildUploadSessionMap(
+	ctx context.Context,
+	driveID string,
+	entries []repository.EntryRecord,
+) (map[string]repository.UploadSessionRecord, error) {
+	uploadIDs := collectUploadIDs(entries)
+	if len(uploadIDs) == 0 {
+		return map[string]repository.UploadSessionRecord{}, nil
+	}
+
+	sessionMap, err := s.repo.GetUploadSessionsByUploadIDs(ctx, driveID, uploadIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return sessionMap, nil
+}
+
+func isVisibleEntry(entry repository.EntryRecord, sessionMap map[string]repository.UploadSessionRecord) bool {
+	if entry.Type != "file" {
+		return true
+	}
+
+	uploadID := strings.TrimSpace(entry.UploadID)
+	if uploadID == "" {
+		return true
+	}
+
+	session, ok := sessionMap[uploadID]
+	if !ok {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSpace(session.Status), "completed")
+}
+
+func (s *service) cleanupStaleUploadEntry(
+	ctx context.Context,
+	driveID string,
+	existing repository.EntryRecord,
+) (bool, error) {
+	if existing.Type != "file" {
+		return false, nil
+	}
+
+	uploadID := strings.TrimSpace(existing.UploadID)
+	if uploadID == "" {
+		return false, nil
+	}
+
+	session, err := s.repo.GetUploadSession(ctx, driveID, uploadID)
+	if err == nil {
+		if strings.EqualFold(strings.TrimSpace(session.Status), "completed") {
+			return false, nil
+		}
+	} else if err != repository.ErrNotFound {
+		return false, fmt.Errorf("resolve entry name: query upload session: %w", err)
+	}
+
+	if err := s.repo.DeleteEntryTree(ctx, driveID, existing.FileID); err != nil && err != repository.ErrNotFound {
+		return false, fmt.Errorf("resolve entry name: cleanup stale entry: %w", err)
+	}
+	return true, nil
 }
 
 func toFolderRecord(node *folderNode, nodes map[string]*folderNode) UploadFolderRecord {

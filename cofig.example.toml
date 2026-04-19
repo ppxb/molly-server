@@ -32,6 +32,7 @@ default_drive_id = "default"
 upload_url_ttl_secs = 900
 download_url_ttl_secs = 900
 recycle_retention_days = 10
+single_put_max_size = 16777216
 
 [object_storage]
 endpoint = "http://127.0.0.1:9000"

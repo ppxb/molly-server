@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"mime"
 	"net/http"
@@ -30,6 +32,7 @@ const (
 	defaultUploadURLTTLSecs     = 900
 	defaultDownloadTTLSecs      = 900
 	defaultRecycleRetentionDays = 10
+	defaultSinglePutMaxSize     = 16 * 1024 * 1024
 	pendingHashPrefix           = "pending:"
 )
 
@@ -193,10 +196,20 @@ func (s *service) CreateWithFolders(ctx context.Context, req CreateWithFoldersRe
 	revisionID := newHexID(40)
 	objectKey := buildObjectKey(driveID, fileID, revisionID)
 	contentType := resolveContentType(req.ContentType, resolvedName)
+	useSinglePut := s.shouldUseSinglePutUpload(req.Size, partNumbers)
 
-	uploadID, err := s.storage.CreateMultipartUpload(ctx, objectKey, contentType)
-	if err != nil {
-		return CreateWithFoldersResponse{}, fmt.Errorf("create with folders: create multipart upload: %w", err)
+	uploadID := newHexID(32)
+	if !useSinglePut {
+		uploadID, err = s.storage.CreateMultipartUpload(ctx, objectKey, contentType)
+		if err != nil {
+			return CreateWithFoldersResponse{}, fmt.Errorf("create with folders: create multipart upload: %w", err)
+		}
+	}
+
+	chunkSize := normalizeChunkSize(req.ChunkSize, req.Size, len(partNumbers))
+	if useSinglePut {
+		chunkSize = 0
+		partNumbers = []int{1}
 	}
 
 	entry, err := s.repo.CreateFileWithUpload(ctx, repository.CreateFileWithUploadParams{
@@ -209,21 +222,30 @@ func (s *service) CreateWithFolders(ctx context.Context, req CreateWithFoldersRe
 		Size:         req.Size,
 		PreHash:      strings.TrimSpace(req.PreHash),
 		PartNumbers:  partNumbers,
-		ChunkSize:    normalizeChunkSize(req.ChunkSize, req.Size, len(partNumbers)),
+		ChunkSize:    chunkSize,
 		ExpiresAt:    time.Now().UTC().Add(s.uploadURLTTL()),
 	})
 	if err != nil {
-		if err == repository.ErrConflict {
+		if !useSinglePut {
 			_ = s.storage.AbortMultipartUpload(ctx, objectKey, uploadID)
+		}
+		if err == repository.ErrConflict {
 			return CreateWithFoldersResponse{}, fmt.Errorf("%w: file already exists", ErrConflict)
 		}
-		_ = s.storage.AbortMultipartUpload(ctx, objectKey, uploadID)
 		return CreateWithFoldersResponse{}, fmt.Errorf("create with folders: persist upload entry: %w", err)
 	}
 
-	partInfoList, err := s.buildPartInfoList(ctx, objectKey, uploadID, partNumbers, contentType)
-	if err != nil {
-		return CreateWithFoldersResponse{}, err
+	var partInfoList []UploadPartInfo
+	if useSinglePut {
+		partInfoList, err = s.buildSinglePutPartInfo(ctx, objectKey, contentType)
+		if err != nil {
+			return CreateWithFoldersResponse{}, err
+		}
+	} else {
+		partInfoList, err = s.buildPartInfoList(ctx, objectKey, uploadID, partNumbers, contentType)
+		if err != nil {
+			return CreateWithFoldersResponse{}, err
+		}
 	}
 
 	return CreateWithFoldersResponse{
@@ -266,6 +288,14 @@ func (s *service) GetUploadURL(ctx context.Context, req GetUploadURLRequest) (Ge
 		return GetUploadURLResponse{}, fmt.Errorf("%w: upload session does not match file", ErrInvalidArgument)
 	}
 
+	session, err := s.repo.GetUploadSession(ctx, driveID, uploadID)
+	if err != nil {
+		if err == repository.ErrNotFound {
+			return GetUploadURLResponse{}, fmt.Errorf("%w: upload session not found", ErrNotFound)
+		}
+		return GetUploadURLResponse{}, fmt.Errorf("get upload url: query session: %w", err)
+	}
+
 	partNumbers, err := normalizePartNumbers(req.PartInfoList)
 	if err != nil {
 		return GetUploadURLResponse{}, err
@@ -274,24 +304,26 @@ func (s *service) GetUploadURL(ctx context.Context, req GetUploadURLRequest) (Ge
 		return GetUploadURLResponse{}, fmt.Errorf("%w: part_info_list is required", ErrInvalidArgument)
 	}
 
-	if err := s.repo.EnsureUploadParts(ctx, uploadID, partNumbers); err != nil {
-		return GetUploadURLResponse{}, fmt.Errorf("get upload url: ensure upload parts: %w", err)
-	}
-
 	contentType := resolveContentType("", entry.Name)
-	partInfo, err := s.buildPartInfoList(ctx, buildObjectKey(entry.DriveID, entry.FileID, entry.RevisionID), uploadID, partNumbers, contentType)
-	if err != nil {
-		return GetUploadURLResponse{}, err
-	}
+	objectKey := buildObjectKey(entry.DriveID, entry.FileID, entry.RevisionID)
 
-	session, err := s.repo.GetUploadSession(ctx, driveID, uploadID)
-	if err != nil && err != repository.ErrNotFound {
-		return GetUploadURLResponse{}, fmt.Errorf("get upload url: query session: %w", err)
-	}
-
-	createAt := "1970-01-01T00:00:00.000Z"
-	if err == nil {
-		createAt = toRFC3339(session.CreatedAt)
+	var partInfo []UploadPartInfo
+	if isSinglePutUploadSession(session) {
+		if err := validateSinglePutPartNumbers(partNumbers); err != nil {
+			return GetUploadURLResponse{}, err
+		}
+		partInfo, err = s.buildSinglePutPartInfo(ctx, objectKey, contentType)
+		if err != nil {
+			return GetUploadURLResponse{}, err
+		}
+	} else {
+		if err := s.repo.EnsureUploadParts(ctx, uploadID, partNumbers); err != nil {
+			return GetUploadURLResponse{}, fmt.Errorf("get upload url: ensure upload parts: %w", err)
+		}
+		partInfo, err = s.buildPartInfoList(ctx, objectKey, uploadID, partNumbers, contentType)
+		if err != nil {
+			return GetUploadURLResponse{}, err
+		}
 	}
 
 	return GetUploadURLResponse{
@@ -300,7 +332,7 @@ func (s *service) GetUploadURL(ctx context.Context, req GetUploadURLRequest) (Ge
 		FileID:       fileID,
 		PartInfoList: partInfo,
 		UploadID:     uploadID,
-		CreateAt:     createAt,
+		CreateAt:     toRFC3339(session.CreatedAt),
 	}, nil
 }
 
@@ -484,6 +516,28 @@ func (s *service) CompleteFile(ctx context.Context, req CompleteFileRequest) (Co
 		return CompleteFileResponse{}, fmt.Errorf("%w: upload session does not match file", ErrInvalidArgument)
 	}
 
+	if isSinglePutUploadSession(session) {
+		if err := s.repo.MarkUploadPartUploaded(ctx, uploadID, 1, entry.Size, ""); err != nil {
+			return CompleteFileResponse{}, fmt.Errorf("complete file: mark single upload part: %w", err)
+		}
+		finalHash, err := s.computeObjectContentHash(ctx, entry)
+		if err != nil {
+			return CompleteFileResponse{}, err
+		}
+		if finalHash != entry.ContentHash {
+			entry, err = s.repo.UpdateEntryHash(ctx, driveID, entry.FileID, finalHash)
+			if err != nil {
+				return CompleteFileResponse{}, fmt.Errorf("complete file: update file hash: %w", err)
+			}
+		}
+
+		if err := s.repo.SetUploadSessionStatus(ctx, uploadID, "completed"); err != nil && err != repository.ErrNotFound {
+			return CompleteFileResponse{}, fmt.Errorf("complete file: set session status: %w", err)
+		}
+
+		return s.toCompleteFileResponse(entry, uploadID), nil
+	}
+
 	completedParts, uploadedParts, err := s.collectCompletedPartsFromStorage(ctx, entry, uploadID, session.PartCount)
 	if err != nil {
 		return CompleteFileResponse{}, err
@@ -504,9 +558,9 @@ func (s *service) CompleteFile(ctx context.Context, req CompleteFileRequest) (Co
 		return CompleteFileResponse{}, fmt.Errorf("complete file: set session status: %w", err)
 	}
 
-	finalHash := strings.TrimSpace(entry.ContentHash)
-	if finalHash == "" {
-		finalHash = pendingHashPrefix + uploadID
+	finalHash, err := s.computeObjectContentHash(ctx, entry)
+	if err != nil {
+		return CompleteFileResponse{}, err
 	}
 	if finalHash != entry.ContentHash {
 		entry, err = s.repo.UpdateEntryHash(ctx, driveID, entry.FileID, finalHash)
@@ -663,9 +717,7 @@ func (s *service) RecycleBinList(ctx context.Context, req RecycleBinListRequest)
 			item.Size = entry.Size
 			item.FileExtension = strings.TrimPrefix(strings.ToLower(ext), ".")
 			item.ContentHash = entry.ContentHash
-			if item.ContentHash != "" && !strings.HasPrefix(item.ContentHash, pendingHashPrefix) {
-				item.ContentHashName = "sha256"
-			}
+			item.ContentHashName = resolveContentHashName(item.ContentHash)
 			item.PunishFlag = 0
 		}
 
@@ -1254,6 +1306,37 @@ func (s *service) buildPartInfoList(
 	return result, nil
 }
 
+func (s *service) buildSinglePutPartInfo(
+	ctx context.Context,
+	objectKey string,
+	contentType string,
+) ([]UploadPartInfo, error) {
+	uploadURL, err := s.storage.PresignPutObject(ctx, objectKey, contentType, s.uploadURLTTL())
+	if err != nil {
+		return nil, fmt.Errorf("build single put part info: presign upload url: %w", err)
+	}
+
+	return []UploadPartInfo{
+		{
+			PartNumber:        1,
+			UploadURL:         uploadURL,
+			InternalUploadURL: "",
+			ContentType:       contentType,
+		},
+	}, nil
+}
+
+func isSinglePutUploadSession(session repository.UploadSessionRecord) bool {
+	return session.PartCount <= 1 && session.ChunkSize == 0
+}
+
+func validateSinglePutPartNumbers(partNumbers []int) error {
+	if len(partNumbers) != 1 || partNumbers[0] != 1 {
+		return fmt.Errorf("%w: single upload accepts only part_number = 1", ErrInvalidArgument)
+	}
+	return nil
+}
+
 func (s *service) collectCompletedPartsFromStorage(
 	ctx context.Context,
 	entry repository.EntryRecord,
@@ -1304,10 +1387,7 @@ func (s *service) collectCompletedPartsFromStorage(
 func (s *service) toCompleteFileResponse(entry repository.EntryRecord, uploadID string) CompleteFileResponse {
 	userMeta, userTags := defaultUserMetaAndTags()
 	fileExtension := strings.TrimPrefix(strings.ToLower(path.Ext(entry.Name)), ".")
-	contentHashName := ""
-	if entry.ContentHash != "" && !strings.HasPrefix(entry.ContentHash, pendingHashPrefix) {
-		contentHashName = "sha256"
-	}
+	contentHashName := resolveContentHashName(entry.ContentHash)
 	contentType := resolveContentType("", entry.Name)
 
 	return CompleteFileResponse{
@@ -1349,6 +1429,33 @@ func (s *service) toCompleteFileResponse(entry repository.EntryRecord, uploadID 
 		Location:                    s.uploadCfg.Location,
 		ContentURI:                  "",
 	}
+}
+
+func (s *service) computeObjectContentHash(ctx context.Context, entry repository.EntryRecord) (string, error) {
+	objectKey := buildObjectKey(entry.DriveID, entry.FileID, entry.RevisionID)
+	reader, err := s.storage.OpenObject(ctx, objectKey)
+	if err != nil {
+		return "", fmt.Errorf("complete file: open object for hashing: %w", err)
+	}
+	defer reader.Close()
+
+	hasher := sha1.New()
+	if _, err := io.Copy(hasher, reader); err != nil {
+		return "", fmt.Errorf("complete file: stream object for hashing: %w", err)
+	}
+
+	return strings.ToUpper(hex.EncodeToString(hasher.Sum(nil))), nil
+}
+
+func resolveContentHashName(contentHash string) string {
+	hashValue := strings.TrimSpace(contentHash)
+	if hashValue == "" {
+		return ""
+	}
+	if strings.HasPrefix(hashValue, pendingHashPrefix) {
+		return ""
+	}
+	return "sha1"
 }
 
 func defaultUserMetaAndTags() (string, map[string]string) {
@@ -1576,6 +1683,24 @@ func (s *service) recycleRetention() time.Duration {
 		days = defaultRecycleRetentionDays
 	}
 	return time.Duration(days) * 24 * time.Hour
+}
+
+func (s *service) singlePutMaxSize() int64 {
+	size := s.uploadCfg.SinglePutMaxSize
+	if size <= 0 {
+		size = defaultSinglePutMaxSize
+	}
+	return size
+}
+
+func (s *service) shouldUseSinglePutUpload(fileSize int64, partNumbers []int) bool {
+	if fileSize < 0 {
+		return false
+	}
+	if len(partNumbers) > 1 {
+		return false
+	}
+	return fileSize <= s.singlePutMaxSize()
 }
 
 func (s *service) normalizeDriveID(driveID string) string {

@@ -36,6 +36,7 @@ type Client interface {
 	ListUploadedParts(ctx context.Context, key, uploadID string) ([]UploadedPart, error)
 	CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []CompletedPart) error
 	AbortMultipartUpload(ctx context.Context, key, uploadID string) error
+	OpenObject(ctx context.Context, key string) (io.ReadCloser, error)
 	PresignGetObject(ctx context.Context, key, disposition string, expires time.Duration) (string, error)
 	PresignPutObject(ctx context.Context, key, contentType string, expires time.Duration) (string, error)
 }
@@ -273,6 +274,32 @@ func (c *client) AbortMultipartUpload(ctx context.Context, key, uploadID string)
 	return nil
 }
 
+func (c *client) OpenObject(ctx context.Context, key string) (io.ReadCloser, error) {
+	req, err := c.buildSignedRequest(ctx, http.MethodGet, key, url.Values{}, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("open object: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("open object: send signed request: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("open object: response status %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf(
+			"open object: response status %d: %s",
+			resp.StatusCode,
+			truncateString(string(responseBody), 512),
+		)
+	}
+
+	return resp.Body, nil
+}
+
 func (c *client) PresignGetObject(ctx context.Context, key, disposition string, expires time.Duration) (string, error) {
 	_ = ctx
 	query := url.Values{}
@@ -295,9 +322,43 @@ func (c *client) doSignedRequest(
 	body []byte,
 	extraHeaders map[string]string,
 ) ([]byte, http.Header, error) {
-	requestURL, canonicalURI, host, err := c.buildObjectURL(key, query)
+	req, err := c.buildSignedRequest(ctx, method, key, query, body, extraHeaders)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("send signed request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read signed request response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, nil, fmt.Errorf(
+			"object storage response status %d: %s",
+			resp.StatusCode,
+			truncateString(string(responseBody), 512),
+		)
+	}
+
+	return responseBody, resp.Header, nil
+}
+
+func (c *client) buildSignedRequest(
+	ctx context.Context,
+	method string,
+	key string,
+	query url.Values,
+	body []byte,
+	extraHeaders map[string]string,
+) (*http.Request, error) {
+	requestURL, canonicalURI, host, err := c.buildObjectURL(key, query)
+	if err != nil {
+		return nil, err
 	}
 
 	payloadHash := sha256Hex(body)
@@ -345,7 +406,7 @@ func (c *client) doSignedRequest(
 
 	req, err := http.NewRequestWithContext(ctx, method, requestURL.String(), bytes.NewReader(body))
 	if err != nil {
-		return nil, nil, fmt.Errorf("build signed request: %w", err)
+		return nil, fmt.Errorf("build signed request: %w", err)
 	}
 	for key, value := range headers {
 		if key == "host" {
@@ -356,21 +417,7 @@ func (c *client) doSignedRequest(
 	}
 	req.Header.Set("Authorization", authorization)
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, nil, fmt.Errorf("send signed request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read signed request response: %w", err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("object storage response status %d: %s", resp.StatusCode, truncateString(string(responseBody), 512))
-	}
-
-	return responseBody, resp.Header, nil
+	return req, nil
 }
 
 func (c *client) presignURL(method string, key string, query url.Values, expires time.Duration) (string, error) {

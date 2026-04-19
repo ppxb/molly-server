@@ -32,7 +32,7 @@ const (
 	defaultUploadURLTTLSecs     = 900
 	defaultDownloadTTLSecs      = 900
 	defaultRecycleRetentionDays = 10
-	defaultSinglePutMaxSize     = 16 * 1024 * 1024
+	defaultSinglePutMaxSize     = 32 * 1024 * 1024
 	pendingHashPrefix           = "pending:"
 )
 
@@ -1327,6 +1327,12 @@ func (s *service) resolveEntryName(
 
 	if mode == "refuse" {
 		return "", fmt.Errorf("%w: file or folder already exists", ErrConflict)
+	}
+	if mode == "overwrite" {
+		if err := s.repo.DeleteEntryTree(ctx, driveID, existing.FileID); err != nil && err != repository.ErrNotFound {
+			return "", fmt.Errorf("resolve entry name: overwrite existing entry: %w", err)
+		}
+		return normalized, nil
 	}
 	if mode != "auto_rename" {
 		return "", fmt.Errorf("%w: unsupported check_name_mode: %s", ErrInvalidArgument, checkNameMode)

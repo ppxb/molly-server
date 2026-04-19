@@ -882,6 +882,35 @@ func (s *service) scheduleObjectDeletion(entries []repository.EntryRecord) {
 	}(keys)
 }
 
+func (s *service) schedulePostCompleteProcessing(
+	entry repository.EntryRecord,
+	uploadID string,
+	uploadedParts []objectstorage.UploadedPart,
+) {
+	if s.storage == nil {
+		return
+	}
+
+	go func(entry repository.EntryRecord, uploadID string, uploadedParts []objectstorage.UploadedPart) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		for _, part := range uploadedParts {
+			_ = s.repo.MarkUploadPartUploaded(ctx, uploadID, int(part.PartNumber), part.Size, part.ETag)
+		}
+
+		finalHash, err := s.computeObjectContentHash(ctx, entry)
+		if err != nil {
+			return
+		}
+		if strings.TrimSpace(finalHash) == "" || finalHash == entry.ContentHash {
+			return
+		}
+
+		_, _ = s.repo.UpdateEntryHash(ctx, entry.DriveID, entry.FileID, finalHash)
+	}(entry, uploadID, append([]objectstorage.UploadedPart(nil), uploadedParts...))
+}
+
 func (s *service) cleanupStaleUploadEntry(
 	ctx context.Context,
 	driveID string,

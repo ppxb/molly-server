@@ -385,7 +385,7 @@ func TestGetFolderSizeInfo_UsesRepositoryStats(t *testing.T) {
 	if resp.Size != 420980503754 || resp.FileCount != 157 || resp.FolderCount != 10 {
 		t.Fatalf("unexpected stats: %#v", resp)
 	}
-	if resp.DisplaySummary != "392.07 GB（包含 157 个文件，10 个文件夹）" {
+	if resp.DisplaySummary != formatFolderSizeSummary(420980503754, 157, 10) {
 		t.Fatalf("unexpected display summary: %s", resp.DisplaySummary)
 	}
 }
@@ -451,5 +451,124 @@ func TestDeleteFile_SchedulesObjectDeletion(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected async object deletion to be scheduled")
+	}
+}
+
+func TestCompleteFile_SinglePutReturnsBeforeHashFinishes(t *testing.T) {
+	t.Parallel()
+
+	hashStartedCh := make(chan struct{}, 1)
+	releaseHashCh := make(chan struct{})
+	hashUpdatedCh := make(chan string, 1)
+
+	repo := &mockRepository{
+		getUploadSessionFn: func(ctx context.Context, driveID, uploadID string) (repository.UploadSessionRecord, error) {
+			return repository.UploadSessionRecord{
+				DriveID:   driveID,
+				UploadID:  uploadID,
+				FileID:    "file-1",
+				PartCount: 1,
+				ChunkSize: 0,
+				Status:    "init",
+			}, nil
+		},
+		getEntryByFileIDFn: func(ctx context.Context, driveID, fileID string) (repository.EntryRecord, error) {
+			return repository.EntryRecord{
+				DriveID:      driveID,
+				FileID:       fileID,
+				ParentFileID: rootFolderID,
+				Name:         "demo.bin",
+				Type:         "file",
+				Size:         8,
+				UploadID:     "upload-1",
+				RevisionID:   "rev-1",
+				EncryptMode:  "none",
+				CreatedAt:    time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
+				UpdatedAt:    time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
+			}, nil
+		},
+		setUploadSessionStatusFn: func(ctx context.Context, uploadID, status string) error {
+			if uploadID != "upload-1" || status != "completed" {
+				t.Fatalf("unexpected session status update: %s %s", uploadID, status)
+			}
+			return nil
+		},
+		markUploadPartUploadedFn: func(ctx context.Context, uploadID string, partNumber int, size int64, etag string) error {
+			if uploadID != "upload-1" || partNumber != 1 {
+				t.Fatalf("unexpected part update: %s %d", uploadID, partNumber)
+			}
+			return nil
+		},
+		updateEntryHashFn: func(ctx context.Context, driveID, fileID, contentHash string) (repository.EntryRecord, error) {
+			hashUpdatedCh <- contentHash
+			return repository.EntryRecord{
+				DriveID:      driveID,
+				FileID:       fileID,
+				ParentFileID: rootFolderID,
+				Name:         "demo.bin",
+				Type:         "file",
+				Size:         8,
+				UploadID:     "upload-1",
+				RevisionID:   "rev-1",
+				EncryptMode:  "none",
+				ContentHash:  contentHash,
+				CreatedAt:    time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
+				UpdatedAt:    time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC),
+			}, nil
+		},
+	}
+
+	storage := &mockStorage{
+		openObjectFn: func(ctx context.Context, key string) (io.ReadCloser, error) {
+			hashStartedCh <- struct{}{}
+			<-releaseHashCh
+			return io.NopCloser(strings.NewReader("payload")), nil
+		},
+	}
+
+	svc := newTestService(repo, storage)
+
+	doneCh := make(chan struct{})
+	var (
+		resp CompleteFileResponse
+		err  error
+	)
+	go func() {
+		resp, err = svc.CompleteFile(context.Background(), CompleteFileRequest{
+			DriveID:  "default",
+			UploadID: "upload-1",
+			FileID:   "file-1",
+		})
+		close(doneCh)
+	}()
+
+	select {
+	case <-doneCh:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("CompleteFile did not return promptly")
+	}
+
+	if err != nil {
+		t.Fatalf("CompleteFile returned error: %v", err)
+	}
+	if resp.FileID != "file-1" {
+		t.Fatalf("unexpected complete response: %#v", resp)
+	}
+
+	select {
+	case <-hashStartedCh:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected background hash to start")
+	}
+
+	close(releaseHashCh)
+
+	select {
+	case contentHash := <-hashUpdatedCh:
+		if contentHash == "" {
+			t.Fatal("expected computed content hash")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected background hash update")
 	}
 }

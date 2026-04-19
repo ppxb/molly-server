@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"molly-server/internal/upload/repository"
+	"molly-server/pkg/objectstorage"
 )
 
 func (s *service) CreateWithFolders(ctx context.Context, req CreateWithFoldersRequest) (CreateWithFoldersResponse, error) {
@@ -261,23 +262,17 @@ func (s *service) CompleteFile(ctx context.Context, req CompleteFileRequest) (Co
 	}
 
 	if isSinglePutUploadSession(session) {
-		if err := s.repo.MarkUploadPartUploaded(ctx, uploadID, 1, entry.Size, ""); err != nil {
-			return CompleteFileResponse{}, fmt.Errorf("complete file: mark single upload part: %w", err)
-		}
-		finalHash, err := s.computeObjectContentHash(ctx, entry)
-		if err != nil {
-			return CompleteFileResponse{}, err
-		}
-		if finalHash != entry.ContentHash {
-			entry, err = s.repo.UpdateEntryHash(ctx, driveID, entry.FileID, finalHash)
-			if err != nil {
-				return CompleteFileResponse{}, fmt.Errorf("complete file: update file hash: %w", err)
-			}
-		}
-
 		if err := s.repo.SetUploadSessionStatus(ctx, uploadID, "completed"); err != nil && err != repository.ErrNotFound {
 			return CompleteFileResponse{}, fmt.Errorf("complete file: set session status: %w", err)
 		}
+
+		s.schedulePostCompleteProcessing(entry, uploadID, []objectstorage.UploadedPart{
+			{
+				PartNumber: 1,
+				ETag:       "",
+				Size:       entry.Size,
+			},
+		})
 
 		return s.toCompleteFileResponse(entry, uploadID), nil
 	}
@@ -292,26 +287,11 @@ func (s *service) CompleteFile(ctx context.Context, req CompleteFileRequest) (Co
 		return CompleteFileResponse{}, fmt.Errorf("complete file: complete multipart upload: %w", err)
 	}
 
-	for _, part := range uploadedParts {
-		if err := s.repo.MarkUploadPartUploaded(ctx, uploadID, int(part.PartNumber), part.Size, part.ETag); err != nil {
-			return CompleteFileResponse{}, fmt.Errorf("complete file: mark uploaded part: %w", err)
-		}
-	}
-
 	if err := s.repo.SetUploadSessionStatus(ctx, uploadID, "completed"); err != nil && err != repository.ErrNotFound {
 		return CompleteFileResponse{}, fmt.Errorf("complete file: set session status: %w", err)
 	}
 
-	finalHash, err := s.computeObjectContentHash(ctx, entry)
-	if err != nil {
-		return CompleteFileResponse{}, err
-	}
-	if finalHash != entry.ContentHash {
-		entry, err = s.repo.UpdateEntryHash(ctx, driveID, entry.FileID, finalHash)
-		if err != nil {
-			return CompleteFileResponse{}, fmt.Errorf("complete file: update file hash: %w", err)
-		}
-	}
+	s.schedulePostCompleteProcessing(entry, uploadID, uploadedParts)
 
 	return s.toCompleteFileResponse(entry, uploadID), nil
 }

@@ -44,6 +44,7 @@ func (h *Handler) RegisterPublicRoutes(group *gin.RouterGroup) {
 	recycleBinGroup.POST("/trash", h.recycleBinTrash)
 	recycleBinGroup.POST("/list", h.recycleBinList)
 	recycleBinGroup.POST("/restore", h.recycleBinRestore)
+	recycleBinGroup.POST("/clear", h.recycleBinClear)
 
 	group.POST("/batch", h.batch)
 }
@@ -574,6 +575,29 @@ func (h *Handler) recycleBinRestore(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) recycleBinClear(c *gin.Context) {
+	var req recycleBinClearRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "InvalidParameter", fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	res, err := h.service.RecycleBinClear(c.Request.Context(), service.RecycleBinClearRequest{
+		DriveID: req.DriveID,
+	})
+	if err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+
+	response.JSON(c, http.StatusOK, recycleBinClearResponse{
+		DomainID:    res.DomainID,
+		DriveID:     res.DriveID,
+		TaskID:      res.TaskID,
+		AsyncTaskID: res.AsyncTaskID,
+	})
 }
 
 func (h *Handler) deleteFile(c *gin.Context) {

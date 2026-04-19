@@ -23,6 +23,7 @@ type Service interface {
 	RecycleBinTrash(ctx context.Context, req RecycleBinTrashRequest) error
 	RecycleBinList(ctx context.Context, req RecycleBinListRequest) (RecycleBinListResponse, error)
 	RecycleBinRestore(ctx context.Context, req RecycleBinRestoreRequest) error
+	RecycleBinClear(ctx context.Context, req RecycleBinClearRequest) (RecycleBinClearResponse, error)
 	DeleteFile(ctx context.Context, req DeleteFileRequest) error
 	Update(ctx context.Context, req UpdateRequest) (UpdateResponse, error)
 	GetLatestAsyncTask(ctx context.Context, req GetLatestAsyncTaskRequest) (GetLatestAsyncTaskResponse, error)
@@ -320,6 +321,17 @@ type RecycleBinListResponse struct {
 type RecycleBinRestoreRequest struct {
 	DriveID string
 	FileID  string
+}
+
+type RecycleBinClearRequest struct {
+	DriveID string
+}
+
+type RecycleBinClearResponse struct {
+	DomainID    string
+	DriveID     string
+	TaskID      string
+	AsyncTaskID string
 }
 
 type DeleteFileRequest struct {

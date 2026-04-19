@@ -864,6 +864,35 @@ func (s *service) RecycleBinRestore(ctx context.Context, req RecycleBinRestoreRe
 	return nil
 }
 
+func (s *service) RecycleBinClear(ctx context.Context, req RecycleBinClearRequest) (RecycleBinClearResponse, error) {
+	driveID := s.normalizeDriveID(req.DriveID)
+	if err := s.repo.EnsureDrive(ctx, driveID); err != nil {
+		return RecycleBinClearResponse{}, fmt.Errorf("recyclebin clear: ensure drive: %w", err)
+	}
+
+	entries, err := s.repo.ListEntries(ctx, repository.ListEntriesParams{
+		DriveID:      driveID,
+		ParentFileID: recycleBinFolderID,
+	})
+	if err != nil {
+		return RecycleBinClearResponse{}, fmt.Errorf("recyclebin clear: query recycle bin entries: %w", err)
+	}
+
+	for _, entry := range entries {
+		if err := s.repo.DeleteEntryTree(ctx, driveID, entry.FileID); err != nil && err != repository.ErrNotFound {
+			return RecycleBinClearResponse{}, fmt.Errorf("recyclebin clear: delete entry tree: %w", err)
+		}
+	}
+
+	taskID := fmt.Sprintf("%sclear", driveID)
+	return RecycleBinClearResponse{
+		DomainID:    s.uploadCfg.DomainID,
+		DriveID:     driveID,
+		TaskID:      taskID,
+		AsyncTaskID: taskID,
+	}, nil
+}
+
 func (s *service) DeleteFile(ctx context.Context, req DeleteFileRequest) error {
 	driveID := s.normalizeDriveID(req.DriveID)
 	if err := s.repo.EnsureDrive(ctx, driveID); err != nil {

@@ -314,6 +314,17 @@ type recycleBinRestoreRequest struct {
 	FileID  string `json:"file_id" binding:"required"`
 }
 
+type recycleBinClearRequest struct {
+	DriveID string `json:"drive_id"`
+}
+
+type recycleBinClearResponse struct {
+	DomainID    string `json:"domain_id"`
+	DriveID     string `json:"drive_id"`
+	TaskID      string `json:"task_id"`
+	AsyncTaskID string `json:"async_task_id"`
+}
+
 type fileDeleteRequest struct {
 	DriveID string `json:"drive_id"`
 	FileID  string `json:"file_id" binding:"required"`

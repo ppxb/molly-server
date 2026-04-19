@@ -36,6 +36,7 @@ type Client interface {
 	ListUploadedParts(ctx context.Context, key, uploadID string) ([]UploadedPart, error)
 	CompleteMultipartUpload(ctx context.Context, key, uploadID string, parts []CompletedPart) error
 	AbortMultipartUpload(ctx context.Context, key, uploadID string) error
+	DeleteObject(ctx context.Context, key string) error
 	OpenObject(ctx context.Context, key string) (io.ReadCloser, error)
 	PresignGetObject(ctx context.Context, key, disposition string, expires time.Duration) (string, error)
 	PresignPutObject(ctx context.Context, key, contentType string, expires time.Duration) (string, error)
@@ -270,6 +271,16 @@ func (c *client) AbortMultipartUpload(ctx context.Context, key, uploadID string)
 	query.Set("uploadId", strings.TrimSpace(uploadID))
 	if _, _, err := c.doSignedRequest(ctx, http.MethodDelete, key, query, nil, nil); err != nil {
 		return fmt.Errorf("abort multipart upload: %w", err)
+	}
+	return nil
+}
+
+func (c *client) DeleteObject(ctx context.Context, key string) error {
+	if strings.TrimSpace(key) == "" {
+		return fmt.Errorf("object key is required")
+	}
+	if _, _, err := c.doSignedRequest(ctx, http.MethodDelete, key, url.Values{}, nil, nil); err != nil {
+		return fmt.Errorf("delete object: %w", err)
 	}
 	return nil
 }

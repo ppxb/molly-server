@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"molly-server/ent/entry"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
@@ -21,6 +24,7 @@ var (
 
 type Repository struct {
 	client *ent.Client
+	db     *sql.DB
 }
 
 type SearchEntriesParams struct {
@@ -41,6 +45,7 @@ type ListEntriesParams struct {
 }
 
 type EntryRecord struct {
+	InternalID          int
 	DriveID             string
 	FileID              string
 	ParentFileID        string
@@ -103,8 +108,17 @@ type UploadPartRecord struct {
 	UpdatedAt  time.Time
 }
 
-func New(client *ent.Client) *Repository {
-	return &Repository{client: client}
+type SubtreeStats struct {
+	Size        int64
+	FileCount   int64
+	FolderCount int64
+}
+
+func New(client *ent.Client, db *sql.DB) *Repository {
+	return &Repository{
+		client: client,
+		db:     db,
+	}
 }
 
 func (r *Repository) EnsureDrive(ctx context.Context, driveID string) error {
@@ -187,6 +201,56 @@ func (r *Repository) ListEntries(ctx context.Context, params ListEntriesParams) 
 		result = append(result, mapEntryRecord(record))
 	}
 	return result, nil
+}
+
+func (r *Repository) GetSubtreeStats(ctx context.Context, driveID, folderID string) (SubtreeStats, error) {
+	if r.db == nil {
+		return SubtreeStats{}, fmt.Errorf("get subtree stats: database handle is not configured")
+	}
+
+	folderID = strings.TrimSpace(folderID)
+	if folderID == "" {
+		return SubtreeStats{}, fmt.Errorf("get subtree stats: empty folder id")
+	}
+
+	const query = `
+WITH RECURSIVE subtree AS (
+    SELECT e.file_id, e.parent_file_id, e.type, e.size, e.upload_id
+    FROM entries e
+    WHERE e.drive_id = $1
+      AND (
+          ($2 = 'root' AND e.parent_file_id = 'root')
+          OR e.file_id = $2
+      )
+    UNION ALL
+    SELECT e.file_id, e.parent_file_id, e.type, e.size, e.upload_id
+    FROM entries e
+    INNER JOIN subtree s ON e.parent_file_id = s.file_id
+    WHERE e.drive_id = $1
+),
+visible AS (
+    SELECT s.*
+    FROM subtree s
+    LEFT JOIN upload_sessions us
+      ON us.drive_id = $1
+     AND us.upload_id = s.upload_id
+    WHERE s.type <> 'file'
+       OR s.upload_id IS NULL
+       OR LOWER(COALESCE(us.status, '')) = 'completed'
+)
+SELECT
+    COALESCE(SUM(CASE WHEN type = 'file' THEN size ELSE 0 END), 0) AS total_size,
+    COALESCE(SUM(CASE WHEN type = 'file' THEN 1 ELSE 0 END), 0) AS file_count,
+    GREATEST(COALESCE(SUM(CASE WHEN type = 'folder' THEN 1 ELSE 0 END), 0) - CASE WHEN $2 = 'root' THEN 0 ELSE 1 END, 0) AS folder_count
+FROM visible;
+`
+
+	var stats SubtreeStats
+	if err := r.db.QueryRowContext(ctx, query, driveID, folderID).Scan(&stats.Size, &stats.FileCount, &stats.FolderCount); err != nil {
+		return SubtreeStats{}, fmt.Errorf("get subtree stats: %w", err)
+	}
+
+	return stats, nil
 }
 
 func applyEntryOrder(query *ent.EntryQuery, orderBy, orderDirection string) {
@@ -365,37 +429,45 @@ func (r *Repository) GetEntryByParentAndName(ctx context.Context, driveID, paren
 }
 
 func (r *Repository) RenameEntry(ctx context.Context, driveID, fileID, newName string) (EntryRecord, error) {
-	record, err := r.client.Entry.Update().
-		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
-		SetName(newName).
-		Save(ctx)
+	const query = `
+UPDATE entries
+SET name = $3, updated_at = NOW()
+WHERE drive_id = $1 AND file_id = $2
+RETURNING id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at;
+`
+
+	record, err := scanEntryRecord(r.db.QueryRowContext(ctx, query, driveID, fileID, newName))
 	if err != nil {
-		if ent.IsConstraintError(err) {
+		if errors.Is(err, sql.ErrNoRows) {
+			return EntryRecord{}, ErrNotFound
+		}
+		if isUniqueViolation(err) {
 			return EntryRecord{}, ErrConflict
 		}
 		return EntryRecord{}, fmt.Errorf("rename entry: %w", err)
 	}
-	if record != 1 {
-		return EntryRecord{}, ErrNotFound
-	}
-	return r.GetEntryByFileID(ctx, driveID, fileID)
+	return record, nil
 }
 
 func (r *Repository) MoveEntry(ctx context.Context, driveID, fileID, targetParentFileID string) (EntryRecord, error) {
-	record, err := r.client.Entry.Update().
-		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
-		SetParentFileID(targetParentFileID).
-		Save(ctx)
+	const query = `
+UPDATE entries
+SET parent_file_id = $3, updated_at = NOW()
+WHERE drive_id = $1 AND file_id = $2
+RETURNING id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at;
+`
+
+	record, err := scanEntryRecord(r.db.QueryRowContext(ctx, query, driveID, fileID, targetParentFileID))
 	if err != nil {
-		if ent.IsConstraintError(err) {
+		if errors.Is(err, sql.ErrNoRows) {
+			return EntryRecord{}, ErrNotFound
+		}
+		if isUniqueViolation(err) {
 			return EntryRecord{}, ErrConflict
 		}
 		return EntryRecord{}, fmt.Errorf("move entry: %w", err)
 	}
-	if record != 1 {
-		return EntryRecord{}, ErrNotFound
-	}
-	return r.GetEntryByFileID(ctx, driveID, fileID)
+	return record, nil
 }
 
 func (r *Repository) TrashEntry(
@@ -408,24 +480,31 @@ func (r *Repository) TrashEntry(
 	trashedAt time.Time,
 	expiredAt time.Time,
 ) (EntryRecord, error) {
-	record, err := r.client.Entry.Update().
-		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
-		SetName(name).
-		SetParentFileID(recycleBinParentID).
-		SetTrashedParentFileID(trashedParentFileID).
-		SetTrashedAt(trashedAt).
-		SetExpiredAt(expiredAt).
-		Save(ctx)
+	const query = `
+UPDATE entries
+SET name = $3,
+    parent_file_id = $4,
+    trashed_parent_file_id = $5,
+    trashed_at = $6,
+    expired_at = $7,
+    updated_at = NOW()
+WHERE drive_id = $1 AND file_id = $2
+RETURNING id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at;
+`
+
+	record, err := scanEntryRecord(
+		r.db.QueryRowContext(ctx, query, driveID, fileID, name, recycleBinParentID, trashedParentFileID, trashedAt, expiredAt),
+	)
 	if err != nil {
-		if ent.IsConstraintError(err) {
+		if errors.Is(err, sql.ErrNoRows) {
+			return EntryRecord{}, ErrNotFound
+		}
+		if isUniqueViolation(err) {
 			return EntryRecord{}, ErrConflict
 		}
 		return EntryRecord{}, fmt.Errorf("trash entry: %w", err)
 	}
-	if record != 1 {
-		return EntryRecord{}, ErrNotFound
-	}
-	return r.GetEntryByFileID(ctx, driveID, fileID)
+	return record, nil
 }
 
 func (r *Repository) RestoreEntry(
@@ -435,60 +514,83 @@ func (r *Repository) RestoreEntry(
 	name string,
 	parentFileID string,
 ) (EntryRecord, error) {
-	record, err := r.client.Entry.Update().
-		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
-		SetName(name).
-		SetParentFileID(parentFileID).
-		ClearTrashedParentFileID().
-		ClearTrashedAt().
-		ClearExpiredAt().
-		Save(ctx)
+	const query = `
+UPDATE entries
+SET name = $3,
+    parent_file_id = $4,
+    trashed_parent_file_id = NULL,
+    trashed_at = NULL,
+    expired_at = NULL,
+    updated_at = NOW()
+WHERE drive_id = $1 AND file_id = $2
+RETURNING id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at;
+`
+
+	record, err := scanEntryRecord(r.db.QueryRowContext(ctx, query, driveID, fileID, name, parentFileID))
 	if err != nil {
-		if ent.IsConstraintError(err) {
+		if errors.Is(err, sql.ErrNoRows) {
+			return EntryRecord{}, ErrNotFound
+		}
+		if isUniqueViolation(err) {
 			return EntryRecord{}, ErrConflict
 		}
 		return EntryRecord{}, fmt.Errorf("restore entry: %w", err)
 	}
-	if record != 1 {
-		return EntryRecord{}, ErrNotFound
-	}
-	return r.GetEntryByFileID(ctx, driveID, fileID)
+	return record, nil
 }
 
-func (r *Repository) DeleteEntryTree(ctx context.Context, driveID, fileID string) error {
-	tx, err := r.client.Tx(ctx)
-	if err != nil {
-		return fmt.Errorf("delete entry tree: open transaction: %w", err)
+func (r *Repository) DeleteEntryTree(ctx context.Context, driveID, fileID string) ([]EntryRecord, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("delete entry tree: database handle is not configured")
 	}
 
-	entryIDs, err := r.queryDescendantFileIDs(ctx, tx, driveID, fileID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		_ = tx.Rollback()
-		return err
+		return nil, fmt.Errorf("delete entry tree: open transaction: %w", err)
 	}
-	if len(entryIDs) == 0 {
+	defer func() {
 		_ = tx.Rollback()
-		return ErrNotFound
-	}
+	}()
 
-	entryRecords, err := tx.Entry.Query().
-		Where(entry.DriveIDEQ(driveID), entry.FileIDIn(entryIDs...)).
-		All(ctx)
+	const selectQuery = `
+WITH RECURSIVE subtree AS (
+    SELECT id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at
+    FROM entries
+    WHERE drive_id = $1 AND file_id = $2
+    UNION ALL
+    SELECT e.id, e.drive_id, e.file_id, e.parent_file_id, e.name, e.type, e.size, e.content_hash, e.pre_hash, e.upload_id, e.trashed_parent_file_id, e.trashed_at, e.expired_at, e.revision_id, e.encrypt_mode, e.created_at, e.updated_at
+    FROM entries e
+    INNER JOIN subtree s ON e.parent_file_id = s.file_id
+    WHERE e.drive_id = $1
+)
+SELECT id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at
+FROM subtree;
+`
+
+	rows, err := tx.QueryContext(ctx, selectQuery, driveID, fileID)
 	if err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("delete entry tree: query tree entries: %w", err)
+		return nil, fmt.Errorf("delete entry tree: query tree entries: %w", err)
 	}
-	if len(entryRecords) == 0 {
-		_ = tx.Rollback()
-		return ErrNotFound
-	}
+	defer rows.Close()
 
-	uploadIDSet := make(map[string]struct{}, len(entryRecords))
-	for _, entryRecord := range entryRecords {
-		if entryRecord.UploadID == nil {
-			continue
+	deletedRecords := make([]EntryRecord, 0, 8)
+	for rows.Next() {
+		record, scanErr := scanEntryRecord(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("delete entry tree: scan tree entry: %w", scanErr)
 		}
-		uploadID := strings.TrimSpace(*entryRecord.UploadID)
+		deletedRecords = append(deletedRecords, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("delete entry tree: iterate tree entries: %w", err)
+	}
+	if len(deletedRecords) == 0 {
+		return nil, ErrNotFound
+	}
+
+	uploadIDSet := make(map[string]struct{}, len(deletedRecords))
+	for _, entryRecord := range deletedRecords {
+		uploadID := strings.TrimSpace(entryRecord.UploadID)
 		if uploadID == "" {
 			continue
 		}
@@ -501,39 +603,55 @@ func (r *Repository) DeleteEntryTree(ctx context.Context, driveID, fileID string
 			uploadIDs = append(uploadIDs, uploadID)
 		}
 
-		if _, err := tx.UploadPart.Delete().Where(uploadpart.UploadIDIn(uploadIDs...)).Exec(ctx); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("delete entry tree: delete upload parts: %w", err)
+		if err := deleteByStringValues(ctx, tx, "upload_parts", "upload_id", uploadIDs); err != nil {
+			return nil, fmt.Errorf("delete entry tree: delete upload parts: %w", err)
 		}
-		if _, err := tx.UploadSession.Delete().Where(uploadsession.UploadIDIn(uploadIDs...)).Exec(ctx); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("delete entry tree: delete upload sessions: %w", err)
+		if err := deleteByStringValues(ctx, tx, "upload_sessions", "upload_id", uploadIDs); err != nil {
+			return nil, fmt.Errorf("delete entry tree: delete upload sessions: %w", err)
 		}
 	}
 
-	if _, err := tx.Entry.Delete().Where(entry.DriveIDEQ(driveID), entry.FileIDIn(entryIDs...)).Exec(ctx); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("delete entry tree: delete entries: %w", err)
+	const deleteEntriesQuery = `
+WITH RECURSIVE subtree AS (
+    SELECT file_id
+    FROM entries
+    WHERE drive_id = $1 AND file_id = $2
+    UNION ALL
+    SELECT e.file_id
+    FROM entries e
+    INNER JOIN subtree s ON e.parent_file_id = s.file_id
+    WHERE e.drive_id = $1
+)
+DELETE FROM entries e
+USING subtree s
+WHERE e.drive_id = $1 AND e.file_id = s.file_id;
+`
+	if _, err := tx.ExecContext(ctx, deleteEntriesQuery, driveID, fileID); err != nil {
+		return nil, fmt.Errorf("delete entry tree: delete entries: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("delete entry tree: commit transaction: %w", err)
+		return nil, fmt.Errorf("delete entry tree: commit transaction: %w", err)
 	}
-	return nil
+	return deletedRecords, nil
 }
 
 func (r *Repository) UpdateEntryHash(ctx context.Context, driveID, fileID, contentHash string) (EntryRecord, error) {
-	record, err := r.client.Entry.Update().
-		Where(entry.DriveIDEQ(driveID), entry.FileIDEQ(fileID)).
-		SetContentHash(contentHash).
-		Save(ctx)
+	const query = `
+UPDATE entries
+SET content_hash = $3, updated_at = NOW()
+WHERE drive_id = $1 AND file_id = $2
+RETURNING id, drive_id, file_id, parent_file_id, name, type, size, content_hash, pre_hash, upload_id, trashed_parent_file_id, trashed_at, expired_at, revision_id, encrypt_mode, created_at, updated_at;
+`
+
+	record, err := scanEntryRecord(r.db.QueryRowContext(ctx, query, driveID, fileID, contentHash))
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return EntryRecord{}, ErrNotFound
+		}
 		return EntryRecord{}, fmt.Errorf("update entry hash: %w", err)
 	}
-	if record != 1 {
-		return EntryRecord{}, ErrNotFound
-	}
-	return r.GetEntryByFileID(ctx, driveID, fileID)
+	return record, nil
 }
 
 func (r *Repository) GetUploadSession(ctx context.Context, driveID, uploadID string) (UploadSessionRecord, error) {
@@ -655,46 +773,92 @@ func (r *Repository) SetUploadSessionStatus(ctx context.Context, uploadID, statu
 	return nil
 }
 
-func (r *Repository) queryDescendantFileIDs(
-	ctx context.Context,
-	tx *ent.Tx,
-	driveID string,
-	rootFileID string,
-) ([]string, error) {
-	rootFileID = strings.TrimSpace(rootFileID)
-	if rootFileID == "" {
-		return nil, fmt.Errorf("delete entry tree: empty file_id")
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func scanEntryRecord(scanner interface{ Scan(dest ...any) error }) (EntryRecord, error) {
+	var (
+		record              EntryRecord
+		contentHash         sql.NullString
+		preHash             sql.NullString
+		uploadID            sql.NullString
+		trashedParentFileID sql.NullString
+		trashedAt           sql.NullTime
+		expiredAt           sql.NullTime
+	)
+
+	if err := scanner.Scan(
+		&record.InternalID,
+		&record.DriveID,
+		&record.FileID,
+		&record.ParentFileID,
+		&record.Name,
+		&record.Type,
+		&record.Size,
+		&contentHash,
+		&preHash,
+		&uploadID,
+		&trashedParentFileID,
+		&trashedAt,
+		&expiredAt,
+		&record.RevisionID,
+		&record.EncryptMode,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	); err != nil {
+		return EntryRecord{}, err
 	}
 
-	ids := []string{rootFileID}
-	seen := map[string]struct{}{
-		rootFileID: {},
+	record.ContentHash = nullStringValue(contentHash)
+	record.PreHash = nullStringValue(preHash)
+	record.UploadID = nullStringValue(uploadID)
+	record.TrashedParentFileID = nullStringValue(trashedParentFileID)
+	record.TrashedAt = nullTimePtr(trashedAt)
+	record.ExpiredAt = nullTimePtr(expiredAt)
+
+	return record, nil
+}
+
+func nullStringValue(value sql.NullString) string {
+	if value.Valid {
+		return value.String
 	}
-	queue := []string{rootFileID}
+	return ""
+}
 
-	for len(queue) > 0 {
-		parentID := queue[0]
-		queue = queue[1:]
+func nullTimePtr(value sql.NullTime) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	normalized := value.Time
+	return &normalized
+}
 
-		children, err := tx.Entry.Query().
-			Where(entry.DriveIDEQ(driveID), entry.ParentFileIDEQ(parentID)).
-			Select(entry.FieldFileID).
-			Strings(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("delete entry tree: query child entries: %w", err)
-		}
-
-		for _, childID := range children {
-			if _, ok := seen[childID]; ok {
-				continue
-			}
-			seen[childID] = struct{}{}
-			ids = append(ids, childID)
-			queue = append(queue, childID)
-		}
+func deleteByStringValues(ctx context.Context, tx *sql.Tx, tableName, columnName string, values []string) error {
+	if len(values) == 0 {
+		return nil
 	}
 
-	return ids, nil
+	args := make([]any, 0, len(values))
+	placeholders := make([]string, 0, len(values))
+	for index, value := range values {
+		args = append(args, value)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", index+1))
+	}
+
+	query := fmt.Sprintf(
+		"DELETE FROM %s WHERE %s IN (%s)",
+		tableName,
+		columnName,
+		strings.Join(placeholders, ", "),
+	)
+
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	return nil
 }
 
 func mapEntryRecord(record *ent.Entry) EntryRecord {
@@ -716,6 +880,7 @@ func mapEntryRecord(record *ent.Entry) EntryRecord {
 	}
 
 	return EntryRecord{
+		InternalID:          record.ID,
 		DriveID:             record.DriveID,
 		FileID:              record.FileID,
 		ParentFileID:        record.ParentFileID,

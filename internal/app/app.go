@@ -28,12 +28,12 @@ type App struct {
 }
 
 func New(cfg config.Config, logger *slog.Logger) (*App, error) {
-	dbClient, err := database.NewEntClient(context.Background(), cfg.Database)
+	dbClient, sqlDB, err := database.NewEntClient(context.Background(), cfg.Database)
 	if err != nil {
 		return nil, fmt.Errorf("new app: init database: %w", err)
 	}
 
-	uploadRepo := repository.New(dbClient)
+	uploadRepo := repository.New(dbClient, sqlDB)
 	storageClient, err := objectstorage.New(cfg.ObjectStorage)
 	if err != nil {
 		return nil, fmt.Errorf("new app: init object storage: %w", err)

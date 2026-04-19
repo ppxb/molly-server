@@ -14,10 +14,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func NewEntClient(ctx context.Context, cfg config.DatabaseConfig) (*ent.Client, error) {
+func NewEntClient(ctx context.Context, cfg config.DatabaseConfig) (*ent.Client, *sql.DB, error) {
 	db, err := sql.Open("pgx", cfg.DSN)
 	if err != nil {
-		return nil, fmt.Errorf("open database: %w", err)
+		return nil, nil, fmt.Errorf("open database: %w", err)
 	}
 
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
@@ -29,9 +29,9 @@ func NewEntClient(ctx context.Context, cfg config.DatabaseConfig) (*ent.Client, 
 	if cfg.AutoMigrate {
 		if err := client.Schema.Create(ctx); err != nil {
 			_ = client.Close()
-			return nil, fmt.Errorf("run schema migration: %w", err)
+			return nil, nil, fmt.Errorf("run schema migration: %w", err)
 		}
 	}
 
-	return client, nil
+	return client, db, nil
 }

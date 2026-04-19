@@ -30,6 +30,7 @@ func (h *Handler) RegisterPublicRoutes(group *gin.RouterGroup) {
 	fileGroup.POST("/list", h.list)
 	fileGroup.POST("/get", h.getFile)
 	fileGroup.POST("/get_path", h.getFilePath)
+	fileGroup.POST("/get_folder_size_info", h.getFolderSizeInfo)
 	fileGroup.POST("/create_with_folders", h.createWithFolders)
 	fileGroup.POST("/get_upload_url", h.getUploadURL)
 	fileGroup.POST("/complete", h.completeFile)
@@ -226,6 +227,30 @@ func (h *Handler) getFilePath(c *gin.Context) {
 	}
 
 	response.JSON(c, http.StatusOK, fileGetPathResponse{Items: items})
+}
+
+func (h *Handler) getFolderSizeInfo(c *gin.Context) {
+	var req fileGetFolderSizeInfoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "InvalidParameter", fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	res, err := h.service.GetFolderSizeInfo(c.Request.Context(), service.GetFolderSizeInfoRequest{
+		DriveID: req.DriveID,
+		FileID:  req.FileID,
+	})
+	if err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+
+	response.JSON(c, http.StatusOK, fileGetFolderSizeInfoResponse{
+		Size:           res.Size,
+		FolderCount:    res.FolderCount,
+		FileCount:      res.FileCount,
+		DisplaySummary: res.DisplaySummary,
+	})
 }
 
 func (h *Handler) createWithFolders(c *gin.Context) {

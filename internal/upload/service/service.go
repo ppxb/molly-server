@@ -480,6 +480,84 @@ func (s *service) GetFilePath(ctx context.Context, req GetFilePathRequest) (GetF
 	return GetFilePathResponse{Items: items}, nil
 }
 
+func (s *service) GetFolderSizeInfo(ctx context.Context, req GetFolderSizeInfoRequest) (GetFolderSizeInfoResponse, error) {
+	driveID := s.normalizeDriveID(req.DriveID)
+	fileID := strings.TrimSpace(req.FileID)
+	if fileID == "" {
+		return GetFolderSizeInfoResponse{}, fmt.Errorf("%w: file_id is required", ErrInvalidArgument)
+	}
+
+	if fileID != rootFolderID {
+		folder, err := s.repo.GetEntryByFileID(ctx, driveID, fileID)
+		if err != nil {
+			if err == repository.ErrNotFound {
+				return GetFolderSizeInfoResponse{}, fmt.Errorf("%w: folder not found", ErrNotFound)
+			}
+			return GetFolderSizeInfoResponse{}, fmt.Errorf("get folder size info: query folder: %w", err)
+		}
+		if folder.Type != "folder" {
+			return GetFolderSizeInfoResponse{}, fmt.Errorf("%w: target is not a folder", ErrInvalidArgument)
+		}
+	}
+
+	entries, err := s.repo.ListEntries(ctx, repository.ListEntriesParams{
+		DriveID: driveID,
+	})
+	if err != nil {
+		return GetFolderSizeInfoResponse{}, fmt.Errorf("get folder size info: list entries: %w", err)
+	}
+
+	sessionMap, err := s.buildUploadSessionMap(ctx, driveID, entries)
+	if err != nil {
+		return GetFolderSizeInfoResponse{}, fmt.Errorf("get folder size info: query upload sessions: %w", err)
+	}
+
+	childrenByParent := make(map[string][]repository.EntryRecord, len(entries))
+	for _, item := range entries {
+		if !isVisibleEntry(item, sessionMap) {
+			continue
+		}
+		parentID := normalizeFolderID(item.ParentFileID)
+		childrenByParent[parentID] = append(childrenByParent[parentID], item)
+	}
+
+	visited := map[string]struct{}{
+		fileID: {},
+	}
+	queue := []string{fileID}
+
+	var size int64
+	var folderCount int64
+	var fileCount int64
+
+	for len(queue) > 0 {
+		currentFolderID := queue[0]
+		queue = queue[1:]
+
+		children := childrenByParent[currentFolderID]
+		for _, child := range children {
+			if child.Type == "folder" {
+				if _, exists := visited[child.FileID]; exists {
+					continue
+				}
+				visited[child.FileID] = struct{}{}
+				folderCount += 1
+				queue = append(queue, child.FileID)
+				continue
+			}
+			fileCount += 1
+			size += child.Size
+		}
+	}
+
+	return GetFolderSizeInfoResponse{
+		Size:           size,
+		FolderCount:    folderCount,
+		FileCount:      fileCount,
+		DisplaySummary: formatFolderSizeSummary(size, fileCount, folderCount),
+	}, nil
+}
+
 func (s *service) CompleteFile(ctx context.Context, req CompleteFileRequest) (CompleteFileResponse, error) {
 	driveID := s.normalizeDriveID(req.DriveID)
 	uploadID := strings.TrimSpace(req.UploadID)
@@ -1829,6 +1907,29 @@ func toRFC3339(value time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func formatFolderSizeSummary(size, fileCount, folderCount int64) string {
+	return fmt.Sprintf("%s（包含 %d 个文件，%d 个文件夹）", formatBytes(size), fileCount, folderCount)
+}
+
+func formatBytes(size int64) string {
+	if size <= 0 {
+		return "0 B"
+	}
+
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
+	value := float64(size)
+	unitIndex := 0
+	for value >= 1024 && unitIndex < len(units)-1 {
+		value /= 1024
+		unitIndex += 1
+	}
+
+	if unitIndex == 0 {
+		return fmt.Sprintf("%d %s", size, units[unitIndex])
+	}
+	return fmt.Sprintf("%.2f %s", value, units[unitIndex])
 }
 
 func toRFC3339Ptr(value *time.Time) string {

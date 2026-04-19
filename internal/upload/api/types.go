@@ -126,6 +126,18 @@ type fileGetPathResponse struct {
 	Items []fileGetPathItem `json:"items"`
 }
 
+type fileGetFolderSizeInfoRequest struct {
+	DriveID string `json:"drive_id"`
+	FileID  string `json:"file_id" binding:"required"`
+}
+
+type fileGetFolderSizeInfoResponse struct {
+	Size           int64  `json:"size"`
+	FolderCount    int64  `json:"folder_count"`
+	FileCount      int64  `json:"file_count"`
+	DisplaySummary string `json:"display_summary"`
+}
+
 type createPartInfoRequest struct {
 	PartNumber int `json:"part_number" binding:"required,min=1"`
 }

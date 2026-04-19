@@ -17,6 +17,7 @@ type Service interface {
 	GetUploadURL(ctx context.Context, req GetUploadURLRequest) (GetUploadURLResponse, error)
 	GetFile(ctx context.Context, req GetFileRequest) (GetFileResponse, error)
 	GetFilePath(ctx context.Context, req GetFilePathRequest) (GetFilePathResponse, error)
+	GetFolderSizeInfo(ctx context.Context, req GetFolderSizeInfoRequest) (GetFolderSizeInfoResponse, error)
 	CompleteFile(ctx context.Context, req CompleteFileRequest) (CompleteFileResponse, error)
 	List(ctx context.Context, req ListRequest) (ListResponse, error)
 	RecycleBinTrash(ctx context.Context, req RecycleBinTrashRequest) error
@@ -218,6 +219,18 @@ type GetFilePathItem struct {
 
 type GetFilePathResponse struct {
 	Items []GetFilePathItem
+}
+
+type GetFolderSizeInfoRequest struct {
+	DriveID string
+	FileID  string
+}
+
+type GetFolderSizeInfoResponse struct {
+	Size           int64
+	FolderCount    int64
+	FileCount      int64
+	DisplaySummary string
 }
 
 type ListRequest struct {

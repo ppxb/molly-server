@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
+	stdlog "log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
 	"molly-server/internal/infrastructure/config"
+	"molly-server/internal/infrastructure/persistence"
 	"molly-server/pkg/logger"
 )
 
@@ -42,7 +45,7 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
+		stdlog.Fatal(err)
 	}
 }
 
@@ -52,7 +55,9 @@ func cmdServer() *cli.Command {
 		Usage: "Start the web server",
 		Action: func(ctx *cli.Context) error {
 			cfg := config.MustLoad(ctx.String("config"))
-			_ = mustInitLogger(cfg)
+			appLog := mustInitLogger(cfg)
+			_ = mustInitDB(cfg, appLog)
+
 			return nil
 		},
 	}
@@ -61,12 +66,19 @@ func cmdServer() *cli.Command {
 func cmdMigrate() *cli.Command {
 	return &cli.Command{
 		Name:  "migrate",
-		Usage: "Run database migrations",
-		Action: func(ctx *cli.Context) error {
-			cfg := config.MustLoad(ctx.String("config"))
-			l := mustInitLogger(cfg)
+		Usage: "Run database schema migrations",
+		Action: func(cliCtx *cli.Context) error {
+			cfg := config.MustLoad(cliCtx.String("config"))
+			appLog := mustInitLogger(cfg)
+			db := mustInitDB(cfg, appLog)
+			defer db.Close()
 
-			l.Info("running migrations...")
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+
+			if err := persistence.Migrate(ctx, db, appLog); err != nil {
+				return fmt.Errorf("migrate: %w", err)
+			}
 			return nil
 		},
 	}
@@ -75,12 +87,21 @@ func cmdMigrate() *cli.Command {
 func mustInitLogger(cfg *config.Config) *logger.Logger {
 	l, err := logger.New(cfg.Log)
 	if err != nil {
-		log.Fatalf("logger init: %v", err)
+		stdlog.Printf("warn: %v", err)
 	}
 	return l
 }
 
-func runUntilSignal(start func() error, shutdown func(ctx context.Context) error, log *logger.Logger) error {
+func mustInitDB(cfg *config.Config, appLog *logger.Logger) *persistence.DB {
+	db, err := persistence.Open(cfg.Database, appLog)
+	if err != nil {
+		appLog.Error("database init failed", "error", err)
+		os.Exit(1)
+	}
+	return db
+}
+
+func runUntilSignal(start func() error, shutdown func(ctx context.Context) error, appLog *logger.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -93,14 +114,16 @@ func runUntilSignal(start func() error, shutdown func(ctx context.Context) error
 		return err
 	case <-ctx.Done():
 		// receive exit signal
-		log.Info("shutting down gracefully...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30e9)
+		appLog.Info("shutting down gracefully...")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+
 		if err := shutdown(shutdownCtx); err != nil {
-			log.Error("shutdown error", "error", err)
+			appLog.Error("shutdown error", "error", err)
 			return err
 		}
-		log.Info("server stopped")
+		appLog.Info("server stopped")
 		return nil
 	}
 }

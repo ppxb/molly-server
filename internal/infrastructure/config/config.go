@@ -46,12 +46,13 @@ type LogConfig struct {
 }
 
 type DatabaseConfig struct {
-	Type        string        `mapstructure:"type"`
+	Type        string        `mapstructure:"type"` // mysql | postgres
 	Host        string        `mapstructure:"host"`
 	Port        int           `mapstructure:"port"`
 	User        string        `mapstructure:"user"`
 	Password    string        `mapstructure:"password"`
 	DBName      string        `mapstructure:"db_name"`
+	SSLMode     string        `mapstructure:"ssl_mode"` // postgres only: disable | require | verify-full
 	MaxOpen     int           `mapstructure:"max_open"`
 	MaxIdle     int           `mapstructure:"max_idle"`
 	MaxLife     time.Duration `mapstructure:"max_life"`

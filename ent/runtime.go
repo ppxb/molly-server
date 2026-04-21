@@ -8,6 +8,7 @@ import (
 	"molly-server/ent/schema"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
+	"molly-server/ent/user"
 	"time"
 )
 
@@ -143,4 +144,14 @@ func init() {
 	uploadsession.DefaultUpdatedAt = uploadsessionDescUpdatedAt.Default.(func() time.Time)
 	// uploadsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	uploadsession.UpdateDefaultUpdatedAt = uploadsessionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	userFields := schema.User{}.Fields()
+	_ = userFields
+	// userDescAge is the schema descriptor for age field.
+	userDescAge := userFields[0].Descriptor()
+	// user.AgeValidator is a validator for the "age" field. It is called by the builders before save.
+	user.AgeValidator = userDescAge.Validators[0].(func(int) error)
+	// userDescName is the schema descriptor for name field.
+	userDescName := userFields[1].Descriptor()
+	// user.DefaultName holds the default value on creation for the name field.
+	user.DefaultName = userDescName.Default.(string)
 }

@@ -10,6 +10,7 @@ import (
 	"molly-server/ent/entry"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
+	"molly-server/ent/user"
 	"reflect"
 	"sync"
 
@@ -80,6 +81,7 @@ func checkColumn(t, c string) error {
 			entry.Table:         entry.ValidColumn,
 			uploadpart.Table:    uploadpart.ValidColumn,
 			uploadsession.Table: uploadsession.ValidColumn,
+			user.Table:          user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

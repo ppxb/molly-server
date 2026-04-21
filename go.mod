@@ -13,6 +13,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/time v0.15.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (

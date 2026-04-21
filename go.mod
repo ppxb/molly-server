@@ -9,7 +9,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1
 	github.com/gin-gonic/gin v1.12.0
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/jackc/pgx/v5 v5.9.1
+	github.com/lib/pq v1.12.3
 	github.com/spf13/viper v1.21.0
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/time v0.15.0
@@ -18,6 +20,7 @@ require (
 
 require (
 	ariga.io/atlas v0.36.2-0.20250730182955-2c6300d0a3e1 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.9 // indirect

@@ -9,6 +9,8 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 
 	"molly-server/ent"
 	"molly-server/internal/infrastructure/config"

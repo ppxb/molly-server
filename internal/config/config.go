@@ -32,10 +32,6 @@ type HTTPConfig struct {
 	ShutdownTimeoutSeconds int    `mapstructure:"shutdown_timeout_seconds"`
 }
 
-func (c HTTPConfig) Address() string {
-	return fmt.Sprintf("%s:%d", c.Host, c.Port)
-}
-
 type LogConfig struct {
 	Level string `mapstructure:"level"`
 }

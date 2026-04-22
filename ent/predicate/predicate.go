@@ -6,14 +6,56 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// APIKey is the predicate function for apikey builders.
+type APIKey func(*sql.Selector)
+
+// DownloadTask is the predicate function for downloadtask builders.
+type DownloadTask func(*sql.Selector)
+
 // Drive is the predicate function for drive builders.
 type Drive func(*sql.Selector)
 
 // Entry is the predicate function for entry builders.
 type Entry func(*sql.Selector)
 
+// FileChunk is the predicate function for filechunk builders.
+type FileChunk func(*sql.Selector)
+
+// FileInfo is the predicate function for fileinfo builders.
+type FileInfo func(*sql.Selector)
+
+// Group is the predicate function for group builders.
+type Group func(*sql.Selector)
+
+// GroupPower is the predicate function for grouppower builders.
+type GroupPower func(*sql.Selector)
+
+// Power is the predicate function for power builders.
+type Power func(*sql.Selector)
+
+// Recycled is the predicate function for recycled builders.
+type Recycled func(*sql.Selector)
+
+// Share is the predicate function for share builders.
+type Share func(*sql.Selector)
+
+// UploadChunk is the predicate function for uploadchunk builders.
+type UploadChunk func(*sql.Selector)
+
 // UploadPart is the predicate function for uploadpart builders.
 type UploadPart func(*sql.Selector)
 
 // UploadSession is the predicate function for uploadsession builders.
 type UploadSession func(*sql.Selector)
+
+// UploadTask is the predicate function for uploadtask builders.
+type UploadTask func(*sql.Selector)
+
+// User is the predicate function for user builders.
+type User func(*sql.Selector)
+
+// UserFile is the predicate function for userfile builders.
+type UserFile func(*sql.Selector)
+
+// VirtualPath is the predicate function for virtualpath builders.
+type VirtualPath func(*sql.Selector)

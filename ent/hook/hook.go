@@ -8,6 +8,30 @@ import (
 	"molly-server/ent"
 )
 
+// The APIKeyFunc type is an adapter to allow the use of ordinary
+// function as APIKey mutator.
+type APIKeyFunc func(context.Context, *ent.APIKeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f APIKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.APIKeyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIKeyMutation", m)
+}
+
+// The DownloadTaskFunc type is an adapter to allow the use of ordinary
+// function as DownloadTask mutator.
+type DownloadTaskFunc func(context.Context, *ent.DownloadTaskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DownloadTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DownloadTaskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DownloadTaskMutation", m)
+}
+
 // The DriveFunc type is an adapter to allow the use of ordinary
 // function as Drive mutator.
 type DriveFunc func(context.Context, *ent.DriveMutation) (ent.Value, error)
@@ -32,6 +56,102 @@ func (f EntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EntryMutation", m)
 }
 
+// The FileChunkFunc type is an adapter to allow the use of ordinary
+// function as FileChunk mutator.
+type FileChunkFunc func(context.Context, *ent.FileChunkMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FileChunkFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FileChunkMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FileChunkMutation", m)
+}
+
+// The FileInfoFunc type is an adapter to allow the use of ordinary
+// function as FileInfo mutator.
+type FileInfoFunc func(context.Context, *ent.FileInfoMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FileInfoFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FileInfoMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FileInfoMutation", m)
+}
+
+// The GroupFunc type is an adapter to allow the use of ordinary
+// function as Group mutator.
+type GroupFunc func(context.Context, *ent.GroupMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GroupMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GroupMutation", m)
+}
+
+// The GroupPowerFunc type is an adapter to allow the use of ordinary
+// function as GroupPower mutator.
+type GroupPowerFunc func(context.Context, *ent.GroupPowerMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GroupPowerFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GroupPowerMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GroupPowerMutation", m)
+}
+
+// The PowerFunc type is an adapter to allow the use of ordinary
+// function as Power mutator.
+type PowerFunc func(context.Context, *ent.PowerMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PowerFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PowerMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PowerMutation", m)
+}
+
+// The RecycledFunc type is an adapter to allow the use of ordinary
+// function as Recycled mutator.
+type RecycledFunc func(context.Context, *ent.RecycledMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RecycledFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RecycledMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RecycledMutation", m)
+}
+
+// The ShareFunc type is an adapter to allow the use of ordinary
+// function as Share mutator.
+type ShareFunc func(context.Context, *ent.ShareMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ShareFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ShareMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ShareMutation", m)
+}
+
+// The UploadChunkFunc type is an adapter to allow the use of ordinary
+// function as UploadChunk mutator.
+type UploadChunkFunc func(context.Context, *ent.UploadChunkMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UploadChunkFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UploadChunkMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UploadChunkMutation", m)
+}
+
 // The UploadPartFunc type is an adapter to allow the use of ordinary
 // function as UploadPart mutator.
 type UploadPartFunc func(context.Context, *ent.UploadPartMutation) (ent.Value, error)
@@ -54,6 +174,54 @@ func (f UploadSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UploadSessionMutation", m)
+}
+
+// The UploadTaskFunc type is an adapter to allow the use of ordinary
+// function as UploadTask mutator.
+type UploadTaskFunc func(context.Context, *ent.UploadTaskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UploadTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UploadTaskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UploadTaskMutation", m)
+}
+
+// The UserFunc type is an adapter to allow the use of ordinary
+// function as User mutator.
+type UserFunc func(context.Context, *ent.UserMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserMutation", m)
+}
+
+// The UserFileFunc type is an adapter to allow the use of ordinary
+// function as UserFile mutator.
+type UserFileFunc func(context.Context, *ent.UserFileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserFileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserFileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserFileMutation", m)
+}
+
+// The VirtualPathFunc type is an adapter to allow the use of ordinary
+// function as VirtualPath mutator.
+type VirtualPathFunc func(context.Context, *ent.VirtualPathMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f VirtualPathFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.VirtualPathMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.VirtualPathMutation", m)
 }
 
 // Condition is a hook condition function.

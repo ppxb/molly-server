@@ -3,11 +3,23 @@
 package ent
 
 import (
+	"molly-server/ent/apikey"
+	"molly-server/ent/downloadtask"
 	"molly-server/ent/drive"
 	"molly-server/ent/entry"
+	"molly-server/ent/filechunk"
+	"molly-server/ent/fileinfo"
+	"molly-server/ent/group"
+	"molly-server/ent/power"
+	"molly-server/ent/recycled"
 	"molly-server/ent/schema"
+	"molly-server/ent/share"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
+	"molly-server/ent/uploadtask"
+	"molly-server/ent/user"
+	"molly-server/ent/userfile"
+	"molly-server/ent/virtualpath"
 	"time"
 )
 
@@ -15,6 +27,92 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	apikeyFields := schema.APIKey{}.Fields()
+	_ = apikeyFields
+	// apikeyDescCreatedAt is the schema descriptor for created_at field.
+	apikeyDescCreatedAt := apikeyFields[5].Descriptor()
+	// apikey.DefaultCreatedAt holds the default value on creation for the created_at field.
+	apikey.DefaultCreatedAt = apikeyDescCreatedAt.Default.(func() time.Time)
+	downloadtaskFields := schema.DownloadTask{}.Fields()
+	_ = downloadtaskFields
+	// downloadtaskDescFileID is the schema descriptor for file_id field.
+	downloadtaskDescFileID := downloadtaskFields[2].Descriptor()
+	// downloadtask.DefaultFileID holds the default value on creation for the file_id field.
+	downloadtask.DefaultFileID = downloadtaskDescFileID.Default.(string)
+	// downloadtaskDescFileSize is the schema descriptor for file_size field.
+	downloadtaskDescFileSize := downloadtaskFields[4].Descriptor()
+	// downloadtask.DefaultFileSize holds the default value on creation for the file_size field.
+	downloadtask.DefaultFileSize = downloadtaskDescFileSize.Default.(int64)
+	// downloadtaskDescDownloadedSize is the schema descriptor for downloaded_size field.
+	downloadtaskDescDownloadedSize := downloadtaskFields[5].Descriptor()
+	// downloadtask.DefaultDownloadedSize holds the default value on creation for the downloaded_size field.
+	downloadtask.DefaultDownloadedSize = downloadtaskDescDownloadedSize.Default.(int64)
+	// downloadtaskDescProgress is the schema descriptor for progress field.
+	downloadtaskDescProgress := downloadtaskFields[6].Descriptor()
+	// downloadtask.DefaultProgress holds the default value on creation for the progress field.
+	downloadtask.DefaultProgress = downloadtaskDescProgress.Default.(int)
+	// downloadtaskDescSpeed is the schema descriptor for speed field.
+	downloadtaskDescSpeed := downloadtaskFields[7].Descriptor()
+	// downloadtask.DefaultSpeed holds the default value on creation for the speed field.
+	downloadtask.DefaultSpeed = downloadtaskDescSpeed.Default.(int64)
+	// downloadtaskDescURL is the schema descriptor for url field.
+	downloadtaskDescURL := downloadtaskFields[9].Descriptor()
+	// downloadtask.DefaultURL holds the default value on creation for the url field.
+	downloadtask.DefaultURL = downloadtaskDescURL.Default.(string)
+	// downloadtaskDescPath is the schema descriptor for path field.
+	downloadtaskDescPath := downloadtaskFields[10].Descriptor()
+	// downloadtask.DefaultPath holds the default value on creation for the path field.
+	downloadtask.DefaultPath = downloadtaskDescPath.Default.(string)
+	// downloadtaskDescVirtualPath is the schema descriptor for virtual_path field.
+	downloadtaskDescVirtualPath := downloadtaskFields[11].Descriptor()
+	// downloadtask.DefaultVirtualPath holds the default value on creation for the virtual_path field.
+	downloadtask.DefaultVirtualPath = downloadtaskDescVirtualPath.Default.(string)
+	// downloadtaskDescState is the schema descriptor for state field.
+	downloadtaskDescState := downloadtaskFields[12].Descriptor()
+	// downloadtask.DefaultState holds the default value on creation for the state field.
+	downloadtask.DefaultState = downloadtaskDescState.Default.(int)
+	// downloadtaskDescErrorMsg is the schema descriptor for error_msg field.
+	downloadtaskDescErrorMsg := downloadtaskFields[13].Descriptor()
+	// downloadtask.DefaultErrorMsg holds the default value on creation for the error_msg field.
+	downloadtask.DefaultErrorMsg = downloadtaskDescErrorMsg.Default.(string)
+	// downloadtaskDescTargetDir is the schema descriptor for target_dir field.
+	downloadtaskDescTargetDir := downloadtaskFields[14].Descriptor()
+	// downloadtask.DefaultTargetDir holds the default value on creation for the target_dir field.
+	downloadtask.DefaultTargetDir = downloadtaskDescTargetDir.Default.(string)
+	// downloadtaskDescSupportRange is the schema descriptor for support_range field.
+	downloadtaskDescSupportRange := downloadtaskFields[15].Descriptor()
+	// downloadtask.DefaultSupportRange holds the default value on creation for the support_range field.
+	downloadtask.DefaultSupportRange = downloadtaskDescSupportRange.Default.(bool)
+	// downloadtaskDescEnableEncryption is the schema descriptor for enable_encryption field.
+	downloadtaskDescEnableEncryption := downloadtaskFields[16].Descriptor()
+	// downloadtask.DefaultEnableEncryption holds the default value on creation for the enable_encryption field.
+	downloadtask.DefaultEnableEncryption = downloadtaskDescEnableEncryption.Default.(bool)
+	// downloadtaskDescInfoHash is the schema descriptor for info_hash field.
+	downloadtaskDescInfoHash := downloadtaskFields[17].Descriptor()
+	// downloadtask.DefaultInfoHash holds the default value on creation for the info_hash field.
+	downloadtask.DefaultInfoHash = downloadtaskDescInfoHash.Default.(string)
+	// downloadtaskDescFileIndex is the schema descriptor for file_index field.
+	downloadtaskDescFileIndex := downloadtaskFields[18].Descriptor()
+	// downloadtask.DefaultFileIndex holds the default value on creation for the file_index field.
+	downloadtask.DefaultFileIndex = downloadtaskDescFileIndex.Default.(int)
+	// downloadtaskDescTorrentName is the schema descriptor for torrent_name field.
+	downloadtaskDescTorrentName := downloadtaskFields[19].Descriptor()
+	// downloadtask.DefaultTorrentName holds the default value on creation for the torrent_name field.
+	downloadtask.DefaultTorrentName = downloadtaskDescTorrentName.Default.(string)
+	// downloadtaskDescCreatedAt is the schema descriptor for created_at field.
+	downloadtaskDescCreatedAt := downloadtaskFields[20].Descriptor()
+	// downloadtask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	downloadtask.DefaultCreatedAt = downloadtaskDescCreatedAt.Default.(func() time.Time)
+	// downloadtaskDescUpdatedAt is the schema descriptor for updated_at field.
+	downloadtaskDescUpdatedAt := downloadtaskFields[21].Descriptor()
+	// downloadtask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	downloadtask.DefaultUpdatedAt = downloadtaskDescUpdatedAt.Default.(func() time.Time)
+	// downloadtask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	downloadtask.UpdateDefaultUpdatedAt = downloadtaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// downloadtaskDescID is the schema descriptor for id field.
+	downloadtaskDescID := downloadtaskFields[0].Descriptor()
+	// downloadtask.DefaultID holds the default value on creation for the id field.
+	downloadtask.DefaultID = downloadtaskDescID.Default.(func() string)
 	driveFields := schema.Drive{}.Fields()
 	_ = driveFields
 	// driveDescDriveID is the schema descriptor for drive_id field.
@@ -83,6 +181,120 @@ func init() {
 	entry.DefaultUpdatedAt = entryDescUpdatedAt.Default.(func() time.Time)
 	// entry.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	entry.UpdateDefaultUpdatedAt = entryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	filechunkFields := schema.FileChunk{}.Fields()
+	_ = filechunkFields
+	// filechunkDescID is the schema descriptor for id field.
+	filechunkDescID := filechunkFields[0].Descriptor()
+	// filechunk.DefaultID holds the default value on creation for the id field.
+	filechunk.DefaultID = filechunkDescID.Default.(func() string)
+	fileinfoFields := schema.FileInfo{}.Fields()
+	_ = fileinfoFields
+	// fileinfoDescPath is the schema descriptor for path field.
+	fileinfoDescPath := fileinfoFields[5].Descriptor()
+	// fileinfo.DefaultPath holds the default value on creation for the path field.
+	fileinfo.DefaultPath = fileinfoDescPath.Default.(string)
+	// fileinfoDescEncPath is the schema descriptor for enc_path field.
+	fileinfoDescEncPath := fileinfoFields[6].Descriptor()
+	// fileinfo.DefaultEncPath holds the default value on creation for the enc_path field.
+	fileinfo.DefaultEncPath = fileinfoDescEncPath.Default.(string)
+	// fileinfoDescThumbnailImg is the schema descriptor for thumbnail_img field.
+	fileinfoDescThumbnailImg := fileinfoFields[7].Descriptor()
+	// fileinfo.DefaultThumbnailImg holds the default value on creation for the thumbnail_img field.
+	fileinfo.DefaultThumbnailImg = fileinfoDescThumbnailImg.Default.(string)
+	// fileinfoDescFileEncHash is the schema descriptor for file_enc_hash field.
+	fileinfoDescFileEncHash := fileinfoFields[9].Descriptor()
+	// fileinfo.DefaultFileEncHash holds the default value on creation for the file_enc_hash field.
+	fileinfo.DefaultFileEncHash = fileinfoDescFileEncHash.Default.(string)
+	// fileinfoDescChunkSignature is the schema descriptor for chunk_signature field.
+	fileinfoDescChunkSignature := fileinfoFields[10].Descriptor()
+	// fileinfo.DefaultChunkSignature holds the default value on creation for the chunk_signature field.
+	fileinfo.DefaultChunkSignature = fileinfoDescChunkSignature.Default.(string)
+	// fileinfoDescFirstChunkHash is the schema descriptor for first_chunk_hash field.
+	fileinfoDescFirstChunkHash := fileinfoFields[11].Descriptor()
+	// fileinfo.DefaultFirstChunkHash holds the default value on creation for the first_chunk_hash field.
+	fileinfo.DefaultFirstChunkHash = fileinfoDescFirstChunkHash.Default.(string)
+	// fileinfoDescSecondChunkHash is the schema descriptor for second_chunk_hash field.
+	fileinfoDescSecondChunkHash := fileinfoFields[12].Descriptor()
+	// fileinfo.DefaultSecondChunkHash holds the default value on creation for the second_chunk_hash field.
+	fileinfo.DefaultSecondChunkHash = fileinfoDescSecondChunkHash.Default.(string)
+	// fileinfoDescThirdChunkHash is the schema descriptor for third_chunk_hash field.
+	fileinfoDescThirdChunkHash := fileinfoFields[13].Descriptor()
+	// fileinfo.DefaultThirdChunkHash holds the default value on creation for the third_chunk_hash field.
+	fileinfo.DefaultThirdChunkHash = fileinfoDescThirdChunkHash.Default.(string)
+	// fileinfoDescHasFullHash is the schema descriptor for has_full_hash field.
+	fileinfoDescHasFullHash := fileinfoFields[14].Descriptor()
+	// fileinfo.DefaultHasFullHash holds the default value on creation for the has_full_hash field.
+	fileinfo.DefaultHasFullHash = fileinfoDescHasFullHash.Default.(bool)
+	// fileinfoDescIsEnc is the schema descriptor for is_enc field.
+	fileinfoDescIsEnc := fileinfoFields[15].Descriptor()
+	// fileinfo.DefaultIsEnc holds the default value on creation for the is_enc field.
+	fileinfo.DefaultIsEnc = fileinfoDescIsEnc.Default.(bool)
+	// fileinfoDescIsChunk is the schema descriptor for is_chunk field.
+	fileinfoDescIsChunk := fileinfoFields[16].Descriptor()
+	// fileinfo.DefaultIsChunk holds the default value on creation for the is_chunk field.
+	fileinfo.DefaultIsChunk = fileinfoDescIsChunk.Default.(bool)
+	// fileinfoDescChunkCount is the schema descriptor for chunk_count field.
+	fileinfoDescChunkCount := fileinfoFields[17].Descriptor()
+	// fileinfo.DefaultChunkCount holds the default value on creation for the chunk_count field.
+	fileinfo.DefaultChunkCount = fileinfoDescChunkCount.Default.(int)
+	// fileinfoDescCreatedAt is the schema descriptor for created_at field.
+	fileinfoDescCreatedAt := fileinfoFields[18].Descriptor()
+	// fileinfo.DefaultCreatedAt holds the default value on creation for the created_at field.
+	fileinfo.DefaultCreatedAt = fileinfoDescCreatedAt.Default.(func() time.Time)
+	// fileinfoDescUpdatedAt is the schema descriptor for updated_at field.
+	fileinfoDescUpdatedAt := fileinfoFields[19].Descriptor()
+	// fileinfo.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	fileinfo.DefaultUpdatedAt = fileinfoDescUpdatedAt.Default.(func() time.Time)
+	// fileinfo.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	fileinfo.UpdateDefaultUpdatedAt = fileinfoDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// fileinfoDescID is the schema descriptor for id field.
+	fileinfoDescID := fileinfoFields[0].Descriptor()
+	// fileinfo.DefaultID holds the default value on creation for the id field.
+	fileinfo.DefaultID = fileinfoDescID.Default.(func() string)
+	groupFields := schema.Group{}.Fields()
+	_ = groupFields
+	// groupDescIsDefault is the schema descriptor for is_default field.
+	groupDescIsDefault := groupFields[1].Descriptor()
+	// group.DefaultIsDefault holds the default value on creation for the is_default field.
+	group.DefaultIsDefault = groupDescIsDefault.Default.(bool)
+	// groupDescSpace is the schema descriptor for space field.
+	groupDescSpace := groupFields[2].Descriptor()
+	// group.DefaultSpace holds the default value on creation for the space field.
+	group.DefaultSpace = groupDescSpace.Default.(int64)
+	// groupDescCreatedAt is the schema descriptor for created_at field.
+	groupDescCreatedAt := groupFields[3].Descriptor()
+	// group.DefaultCreatedAt holds the default value on creation for the created_at field.
+	group.DefaultCreatedAt = groupDescCreatedAt.Default.(func() time.Time)
+	powerFields := schema.Power{}.Fields()
+	_ = powerFields
+	// powerDescCreatedAt is the schema descriptor for created_at field.
+	powerDescCreatedAt := powerFields[3].Descriptor()
+	// power.DefaultCreatedAt holds the default value on creation for the created_at field.
+	power.DefaultCreatedAt = powerDescCreatedAt.Default.(func() time.Time)
+	recycledFields := schema.Recycled{}.Fields()
+	_ = recycledFields
+	// recycledDescCreatedAt is the schema descriptor for created_at field.
+	recycledDescCreatedAt := recycledFields[3].Descriptor()
+	// recycled.DefaultCreatedAt holds the default value on creation for the created_at field.
+	recycled.DefaultCreatedAt = recycledDescCreatedAt.Default.(func() time.Time)
+	// recycledDescID is the schema descriptor for id field.
+	recycledDescID := recycledFields[0].Descriptor()
+	// recycled.DefaultID holds the default value on creation for the id field.
+	recycled.DefaultID = recycledDescID.Default.(func() string)
+	shareFields := schema.Share{}.Fields()
+	_ = shareFields
+	// shareDescPasswordHash is the schema descriptor for password_hash field.
+	shareDescPasswordHash := shareFields[3].Descriptor()
+	// share.DefaultPasswordHash holds the default value on creation for the password_hash field.
+	share.DefaultPasswordHash = shareDescPasswordHash.Default.(string)
+	// shareDescDownloadCount is the schema descriptor for download_count field.
+	shareDescDownloadCount := shareFields[4].Descriptor()
+	// share.DefaultDownloadCount holds the default value on creation for the download_count field.
+	share.DefaultDownloadCount = shareDescDownloadCount.Default.(int)
+	// shareDescCreatedAt is the schema descriptor for created_at field.
+	shareDescCreatedAt := shareFields[6].Descriptor()
+	// share.DefaultCreatedAt holds the default value on creation for the created_at field.
+	share.DefaultCreatedAt = shareDescCreatedAt.Default.(func() time.Time)
 	uploadpartFields := schema.UploadPart{}.Fields()
 	_ = uploadpartFields
 	// uploadpartDescUploadID is the schema descriptor for upload_id field.
@@ -143,4 +355,108 @@ func init() {
 	uploadsession.DefaultUpdatedAt = uploadsessionDescUpdatedAt.Default.(func() time.Time)
 	// uploadsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	uploadsession.UpdateDefaultUpdatedAt = uploadsessionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	uploadtaskFields := schema.UploadTask{}.Fields()
+	_ = uploadtaskFields
+	// uploadtaskDescChunkSize is the schema descriptor for chunk_size field.
+	uploadtaskDescChunkSize := uploadtaskFields[4].Descriptor()
+	// uploadtask.DefaultChunkSize holds the default value on creation for the chunk_size field.
+	uploadtask.DefaultChunkSize = uploadtaskDescChunkSize.Default.(int64)
+	// uploadtaskDescUploadedChunks is the schema descriptor for uploaded_chunks field.
+	uploadtaskDescUploadedChunks := uploadtaskFields[6].Descriptor()
+	// uploadtask.DefaultUploadedChunks holds the default value on creation for the uploaded_chunks field.
+	uploadtask.DefaultUploadedChunks = uploadtaskDescUploadedChunks.Default.(int)
+	// uploadtaskDescChunkSignature is the schema descriptor for chunk_signature field.
+	uploadtaskDescChunkSignature := uploadtaskFields[7].Descriptor()
+	// uploadtask.DefaultChunkSignature holds the default value on creation for the chunk_signature field.
+	uploadtask.DefaultChunkSignature = uploadtaskDescChunkSignature.Default.(string)
+	// uploadtaskDescStatus is the schema descriptor for status field.
+	uploadtaskDescStatus := uploadtaskFields[10].Descriptor()
+	// uploadtask.DefaultStatus holds the default value on creation for the status field.
+	uploadtask.DefaultStatus = uploadtaskDescStatus.Default.(string)
+	// uploadtaskDescErrorMessage is the schema descriptor for error_message field.
+	uploadtaskDescErrorMessage := uploadtaskFields[11].Descriptor()
+	// uploadtask.DefaultErrorMessage holds the default value on creation for the error_message field.
+	uploadtask.DefaultErrorMessage = uploadtaskDescErrorMessage.Default.(string)
+	// uploadtaskDescCreatedAt is the schema descriptor for created_at field.
+	uploadtaskDescCreatedAt := uploadtaskFields[12].Descriptor()
+	// uploadtask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	uploadtask.DefaultCreatedAt = uploadtaskDescCreatedAt.Default.(func() time.Time)
+	// uploadtaskDescUpdatedAt is the schema descriptor for updated_at field.
+	uploadtaskDescUpdatedAt := uploadtaskFields[13].Descriptor()
+	// uploadtask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	uploadtask.DefaultUpdatedAt = uploadtaskDescUpdatedAt.Default.(func() time.Time)
+	// uploadtask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	uploadtask.UpdateDefaultUpdatedAt = uploadtaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// uploadtaskDescID is the schema descriptor for id field.
+	uploadtaskDescID := uploadtaskFields[0].Descriptor()
+	// uploadtask.DefaultID holds the default value on creation for the id field.
+	uploadtask.DefaultID = uploadtaskDescID.Default.(func() string)
+	userFields := schema.User{}.Fields()
+	_ = userFields
+	// userDescPhone is the schema descriptor for phone field.
+	userDescPhone := userFields[5].Descriptor()
+	// user.DefaultPhone holds the default value on creation for the phone field.
+	user.DefaultPhone = userDescPhone.Default.(string)
+	// userDescSpace is the schema descriptor for space field.
+	userDescSpace := userFields[7].Descriptor()
+	// user.DefaultSpace holds the default value on creation for the space field.
+	user.DefaultSpace = userDescSpace.Default.(int64)
+	// userDescFreeSpace is the schema descriptor for free_space field.
+	userDescFreeSpace := userFields[8].Descriptor()
+	// user.DefaultFreeSpace holds the default value on creation for the free_space field.
+	user.DefaultFreeSpace = userDescFreeSpace.Default.(int64)
+	// userDescFilePassword is the schema descriptor for file_password field.
+	userDescFilePassword := userFields[9].Descriptor()
+	// user.DefaultFilePassword holds the default value on creation for the file_password field.
+	user.DefaultFilePassword = userDescFilePassword.Default.(string)
+	// userDescState is the schema descriptor for state field.
+	userDescState := userFields[10].Descriptor()
+	// user.DefaultState holds the default value on creation for the state field.
+	user.DefaultState = userDescState.Default.(int)
+	// userDescCreatedAt is the schema descriptor for created_at field.
+	userDescCreatedAt := userFields[11].Descriptor()
+	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
+	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() time.Time)
+	// userDescID is the schema descriptor for id field.
+	userDescID := userFields[0].Descriptor()
+	// user.DefaultID holds the default value on creation for the id field.
+	user.DefaultID = userDescID.Default.(func() string)
+	userfileFields := schema.UserFile{}.Fields()
+	_ = userfileFields
+	// userfileDescIsPublic is the schema descriptor for is_public field.
+	userfileDescIsPublic := userfileFields[5].Descriptor()
+	// userfile.DefaultIsPublic holds the default value on creation for the is_public field.
+	userfile.DefaultIsPublic = userfileDescIsPublic.Default.(bool)
+	// userfileDescCreatedAt is the schema descriptor for created_at field.
+	userfileDescCreatedAt := userfileFields[6].Descriptor()
+	// userfile.DefaultCreatedAt holds the default value on creation for the created_at field.
+	userfile.DefaultCreatedAt = userfileDescCreatedAt.Default.(func() time.Time)
+	// userfileDescID is the schema descriptor for id field.
+	userfileDescID := userfileFields[0].Descriptor()
+	// userfile.DefaultID holds the default value on creation for the id field.
+	userfile.DefaultID = userfileDescID.Default.(func() string)
+	virtualpathFields := schema.VirtualPath{}.Fields()
+	_ = virtualpathFields
+	// virtualpathDescIsFile is the schema descriptor for is_file field.
+	virtualpathDescIsFile := virtualpathFields[2].Descriptor()
+	// virtualpath.DefaultIsFile holds the default value on creation for the is_file field.
+	virtualpath.DefaultIsFile = virtualpathDescIsFile.Default.(bool)
+	// virtualpathDescIsDir is the schema descriptor for is_dir field.
+	virtualpathDescIsDir := virtualpathFields[3].Descriptor()
+	// virtualpath.DefaultIsDir holds the default value on creation for the is_dir field.
+	virtualpath.DefaultIsDir = virtualpathDescIsDir.Default.(bool)
+	// virtualpathDescParentLevel is the schema descriptor for parent_level field.
+	virtualpathDescParentLevel := virtualpathFields[4].Descriptor()
+	// virtualpath.DefaultParentLevel holds the default value on creation for the parent_level field.
+	virtualpath.DefaultParentLevel = virtualpathDescParentLevel.Default.(string)
+	// virtualpathDescCreatedAt is the schema descriptor for created_at field.
+	virtualpathDescCreatedAt := virtualpathFields[5].Descriptor()
+	// virtualpath.DefaultCreatedAt holds the default value on creation for the created_at field.
+	virtualpath.DefaultCreatedAt = virtualpathDescCreatedAt.Default.(func() time.Time)
+	// virtualpathDescUpdatedAt is the schema descriptor for updated_at field.
+	virtualpathDescUpdatedAt := virtualpathFields[6].Descriptor()
+	// virtualpath.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	virtualpath.DefaultUpdatedAt = virtualpathDescUpdatedAt.Default.(func() time.Time)
+	// virtualpath.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	virtualpath.UpdateDefaultUpdatedAt = virtualpathDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

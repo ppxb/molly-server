@@ -3,11 +3,87 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
 
 var (
+	// APIKeyColumns holds the columns for the "api_key" table.
+	APIKeyColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "private_key", Type: field.TypeString},
+		{Name: "s3_secret_key", Type: field.TypeString},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+	}
+	// APIKeyTable holds the schema information for the "api_key" table.
+	APIKeyTable = &schema.Table{
+		Name:       "api_key",
+		Columns:    APIKeyColumns,
+		PrimaryKey: []*schema.Column{APIKeyColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "api_key_users_api_keys",
+				Columns:    []*schema.Column{APIKeyColumns[6]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "apikey_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeyColumns[6]},
+			},
+		},
+	}
+	// DownloadTaskColumns holds the columns for the "download_task" table.
+	DownloadTaskColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "file_id", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "file_name", Type: field.TypeString},
+		{Name: "file_size", Type: field.TypeInt64, Default: 0},
+		{Name: "downloaded_size", Type: field.TypeInt64, Default: 0},
+		{Name: "progress", Type: field.TypeInt, Default: 0},
+		{Name: "speed", Type: field.TypeInt64, Default: 0},
+		{Name: "type", Type: field.TypeInt},
+		{Name: "url", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "path", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "virtual_path", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "state", Type: field.TypeInt, Default: 0},
+		{Name: "error_msg", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "target_dir", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "support_range", Type: field.TypeBool, Default: false},
+		{Name: "enable_encryption", Type: field.TypeBool, Default: false},
+		{Name: "info_hash", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "file_index", Type: field.TypeInt, Default: 0},
+		{Name: "torrent_name", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "create_time", Type: field.TypeTime},
+		{Name: "update_time", Type: field.TypeTime},
+		{Name: "finish_time", Type: field.TypeTime, Nullable: true},
+	}
+	// DownloadTaskTable holds the schema information for the "download_task" table.
+	DownloadTaskTable = &schema.Table{
+		Name:       "download_task",
+		Columns:    DownloadTaskColumns,
+		PrimaryKey: []*schema.Column{DownloadTaskColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "downloadtask_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{DownloadTaskColumns[1]},
+			},
+			{
+				Name:    "downloadtask_info_hash",
+				Unique:  false,
+				Columns: []*schema.Column{DownloadTaskColumns[17]},
+			},
+		},
+	}
 	// DrivesColumns holds the columns for the "drives" table.
 	DrivesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -65,6 +141,229 @@ var (
 			},
 		},
 	}
+	// FileChunkColumns holds the columns for the "file_chunk" table.
+	FileChunkColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "chunk_path", Type: field.TypeString},
+		{Name: "chunk_size", Type: field.TypeUint64},
+		{Name: "chunk_hash", Type: field.TypeString},
+		{Name: "chunk_index", Type: field.TypeUint32},
+		{Name: "file_id", Type: field.TypeString},
+	}
+	// FileChunkTable holds the schema information for the "file_chunk" table.
+	FileChunkTable = &schema.Table{
+		Name:       "file_chunk",
+		Columns:    FileChunkColumns,
+		PrimaryKey: []*schema.Column{FileChunkColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "file_chunk_file_info_chunks",
+				Columns:    []*schema.Column{FileChunkColumns[5]},
+				RefColumns: []*schema.Column{FileInfoColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "filechunk_file_id",
+				Unique:  false,
+				Columns: []*schema.Column{FileChunkColumns[5]},
+			},
+		},
+	}
+	// FileInfoColumns holds the columns for the "file_info" table.
+	FileInfoColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "random_name", Type: field.TypeString},
+		{Name: "size", Type: field.TypeInt64},
+		{Name: "mime", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "enc_path", Type: field.TypeString, Default: ""},
+		{Name: "thumbnail_img", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "file_hash", Type: field.TypeString},
+		{Name: "file_enc_hash", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "chunk_signature", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "first_chunk_hash", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "second_chunk_hash", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "third_chunk_hash", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "has_full_hash", Type: field.TypeBool, Default: false},
+		{Name: "is_enc", Type: field.TypeBool, Default: false},
+		{Name: "is_chunk", Type: field.TypeBool, Default: false},
+		{Name: "chunk_count", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// FileInfoTable holds the schema information for the "file_info" table.
+	FileInfoTable = &schema.Table{
+		Name:       "file_info",
+		Columns:    FileInfoColumns,
+		PrimaryKey: []*schema.Column{FileInfoColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "fileinfo_file_hash",
+				Unique:  false,
+				Columns: []*schema.Column{FileInfoColumns[8]},
+			},
+			{
+				Name:    "fileinfo_chunk_signature",
+				Unique:  false,
+				Columns: []*schema.Column{FileInfoColumns[10]},
+			},
+			{
+				Name:    "fileinfo_mime",
+				Unique:  false,
+				Columns: []*schema.Column{FileInfoColumns[4]},
+			},
+			{
+				Name:    "fileinfo_name",
+				Unique:  false,
+				Columns: []*schema.Column{FileInfoColumns[1]},
+			},
+		},
+	}
+	// GroupsColumns holds the columns for the "groups" table.
+	GroupsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "is_default", Type: field.TypeBool, Default: false},
+		{Name: "space", Type: field.TypeInt64, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// GroupsTable holds the schema information for the "groups" table.
+	GroupsTable = &schema.Table{
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
+	}
+	// GroupPowerColumns holds the columns for the "group_power" table.
+	GroupPowerColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "group_id", Type: field.TypeInt},
+		{Name: "power_id", Type: field.TypeInt},
+	}
+	// GroupPowerTable holds the schema information for the "group_power" table.
+	GroupPowerTable = &schema.Table{
+		Name:       "group_power",
+		Columns:    GroupPowerColumns,
+		PrimaryKey: []*schema.Column{GroupPowerColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "group_power_groups_group",
+				Columns:    []*schema.Column{GroupPowerColumns[1]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "group_power_power_power",
+				Columns:    []*schema.Column{GroupPowerColumns[2]},
+				RefColumns: []*schema.Column{PowerColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grouppower_group_id_power_id",
+				Unique:  true,
+				Columns: []*schema.Column{GroupPowerColumns[1], GroupPowerColumns[2]},
+			},
+		},
+	}
+	// PowerColumns holds the columns for the "power" table.
+	PowerColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString},
+		{Name: "characteristic", Type: field.TypeString, Unique: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// PowerTable holds the schema information for the "power" table.
+	PowerTable = &schema.Table{
+		Name:       "power",
+		Columns:    PowerColumns,
+		PrimaryKey: []*schema.Column{PowerColumns[0]},
+	}
+	// RecycledColumns holds the columns for the "recycled" table.
+	RecycledColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "file_id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// RecycledTable holds the schema information for the "recycled" table.
+	RecycledTable = &schema.Table{
+		Name:       "recycled",
+		Columns:    RecycledColumns,
+		PrimaryKey: []*schema.Column{RecycledColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "recycled_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{RecycledColumns[1]},
+			},
+			{
+				Name:    "recycled_file_id",
+				Unique:  false,
+				Columns: []*schema.Column{RecycledColumns[2]},
+			},
+		},
+	}
+	// SharesColumns holds the columns for the "shares" table.
+	SharesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "file_id", Type: field.TypeString},
+		{Name: "token", Type: field.TypeString, Unique: true},
+		{Name: "password_hash", Type: field.TypeString, Default: ""},
+		{Name: "download_count", Type: field.TypeInt, Default: 0},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SharesTable holds the schema information for the "shares" table.
+	SharesTable = &schema.Table{
+		Name:       "shares",
+		Columns:    SharesColumns,
+		PrimaryKey: []*schema.Column{SharesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "share_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{SharesColumns[1]},
+			},
+			{
+				Name:    "share_token",
+				Unique:  false,
+				Columns: []*schema.Column{SharesColumns[3]},
+			},
+		},
+	}
+	// UploadChunkColumns holds the columns for the "upload_chunk" table.
+	UploadChunkColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "file_name", Type: field.TypeString},
+		{Name: "file_size", Type: field.TypeInt64},
+		{Name: "md5", Type: field.TypeString},
+		{Name: "path_id", Type: field.TypeString},
+	}
+	// UploadChunkTable holds the schema information for the "upload_chunk" table.
+	UploadChunkTable = &schema.Table{
+		Name:       "upload_chunk",
+		Columns:    UploadChunkColumns,
+		PrimaryKey: []*schema.Column{UploadChunkColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "uploadchunk_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{UploadChunkColumns[1]},
+			},
+			{
+				Name:    "uploadchunk_path_id",
+				Unique:  false,
+				Columns: []*schema.Column{UploadChunkColumns[5]},
+			},
+		},
+	}
 	// UploadPartsColumns holds the columns for the "upload_parts" table.
 	UploadPartsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -115,14 +414,222 @@ var (
 			},
 		},
 	}
+	// UploadTaskColumns holds the columns for the "upload_task" table.
+	UploadTaskColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "file_name", Type: field.TypeString},
+		{Name: "file_size", Type: field.TypeInt64},
+		{Name: "chunk_size", Type: field.TypeInt64, Default: 5242880},
+		{Name: "total_chunks", Type: field.TypeInt},
+		{Name: "uploaded_chunks", Type: field.TypeInt, Default: 0},
+		{Name: "chunk_signature", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "path_id", Type: field.TypeString},
+		{Name: "temp_dir", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "error_message", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "create_time", Type: field.TypeTime},
+		{Name: "update_time", Type: field.TypeTime},
+		{Name: "expire_time", Type: field.TypeTime},
+	}
+	// UploadTaskTable holds the schema information for the "upload_task" table.
+	UploadTaskTable = &schema.Table{
+		Name:       "upload_task",
+		Columns:    UploadTaskColumns,
+		PrimaryKey: []*schema.Column{UploadTaskColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "uploadtask_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{UploadTaskColumns[1]},
+			},
+			{
+				Name:    "uploadtask_status",
+				Unique:  false,
+				Columns: []*schema.Column{UploadTaskColumns[10]},
+			},
+			{
+				Name:    "uploadtask_expire_time",
+				Unique:  false,
+				Columns: []*schema.Column{UploadTaskColumns[14]},
+			},
+		},
+	}
+	// UsersColumns holds the columns for the "users" table.
+	UsersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "nick_name", Type: field.TypeString},
+		{Name: "user_name", Type: field.TypeString, Unique: true},
+		{Name: "password", Type: field.TypeString},
+		{Name: "email", Type: field.TypeString},
+		{Name: "phone", Type: field.TypeString, Default: ""},
+		{Name: "space", Type: field.TypeInt64, Default: 0},
+		{Name: "free_space", Type: field.TypeInt64, Default: 0},
+		{Name: "file_password", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "state", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "group_id", Type: field.TypeInt},
+	}
+	// UsersTable holds the schema information for the "users" table.
+	UsersTable = &schema.Table{
+		Name:       "users",
+		Columns:    UsersColumns,
+		PrimaryKey: []*schema.Column{UsersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "users_groups_users",
+				Columns:    []*schema.Column{UsersColumns[11]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// UserFilesColumns holds the columns for the "user_files" table.
+	UserFilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "file_id", Type: field.TypeString},
+		{Name: "file_name", Type: field.TypeString},
+		{Name: "virtual_path", Type: field.TypeString},
+		{Name: "public", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeString},
+	}
+	// UserFilesTable holds the schema information for the "user_files" table.
+	UserFilesTable = &schema.Table{
+		Name:       "user_files",
+		Columns:    UserFilesColumns,
+		PrimaryKey: []*schema.Column{UserFilesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_files_users_user_files",
+				Columns:    []*schema.Column{UserFilesColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "userfile_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserFilesColumns[7]},
+			},
+			{
+				Name:    "userfile_file_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserFilesColumns[1]},
+			},
+			{
+				Name:    "userfile_user_id_virtual_path",
+				Unique:  false,
+				Columns: []*schema.Column{UserFilesColumns[7], UserFilesColumns[3]},
+			},
+			{
+				Name:    "userfile_user_id_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{UserFilesColumns[7], UserFilesColumns[6]},
+			},
+		},
+	}
+	// VirtualPathColumns holds the columns for the "virtual_path" table.
+	VirtualPathColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString},
+		{Name: "is_file", Type: field.TypeBool, Default: false},
+		{Name: "is_dir", Type: field.TypeBool, Default: true},
+		{Name: "parent_level", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "created_time", Type: field.TypeTime},
+		{Name: "update_time", Type: field.TypeTime},
+	}
+	// VirtualPathTable holds the schema information for the "virtual_path" table.
+	VirtualPathTable = &schema.Table{
+		Name:       "virtual_path",
+		Columns:    VirtualPathColumns,
+		PrimaryKey: []*schema.Column{VirtualPathColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "virtualpath_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{VirtualPathColumns[1]},
+			},
+			{
+				Name:    "virtualpath_user_id_path",
+				Unique:  false,
+				Columns: []*schema.Column{VirtualPathColumns[1], VirtualPathColumns[2]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		APIKeyTable,
+		DownloadTaskTable,
 		DrivesTable,
 		EntriesTable,
+		FileChunkTable,
+		FileInfoTable,
+		GroupsTable,
+		GroupPowerTable,
+		PowerTable,
+		RecycledTable,
+		SharesTable,
+		UploadChunkTable,
 		UploadPartsTable,
 		UploadSessionsTable,
+		UploadTaskTable,
+		UsersTable,
+		UserFilesTable,
+		VirtualPathTable,
 	}
 )
 
 func init() {
+	APIKeyTable.ForeignKeys[0].RefTable = UsersTable
+	APIKeyTable.Annotation = &entsql.Annotation{
+		Table: "api_key",
+	}
+	DownloadTaskTable.Annotation = &entsql.Annotation{
+		Table: "download_task",
+	}
+	FileChunkTable.ForeignKeys[0].RefTable = FileInfoTable
+	FileChunkTable.Annotation = &entsql.Annotation{
+		Table: "file_chunk",
+	}
+	FileInfoTable.Annotation = &entsql.Annotation{
+		Table: "file_info",
+	}
+	GroupsTable.Annotation = &entsql.Annotation{
+		Table: "groups",
+	}
+	GroupPowerTable.ForeignKeys[0].RefTable = GroupsTable
+	GroupPowerTable.ForeignKeys[1].RefTable = PowerTable
+	GroupPowerTable.Annotation = &entsql.Annotation{
+		Table: "group_power",
+	}
+	PowerTable.Annotation = &entsql.Annotation{
+		Table: "power",
+	}
+	RecycledTable.Annotation = &entsql.Annotation{
+		Table: "recycled",
+	}
+	SharesTable.Annotation = &entsql.Annotation{
+		Table: "shares",
+	}
+	UploadChunkTable.Annotation = &entsql.Annotation{
+		Table: "upload_chunk",
+	}
+	UploadTaskTable.Annotation = &entsql.Annotation{
+		Table: "upload_task",
+	}
+	UsersTable.ForeignKeys[0].RefTable = GroupsTable
+	UsersTable.Annotation = &entsql.Annotation{
+		Table: "users",
+	}
+	UserFilesTable.ForeignKeys[0].RefTable = UsersTable
+	UserFilesTable.Annotation = &entsql.Annotation{
+		Table: "user_files",
+	}
+	VirtualPathTable.Annotation = &entsql.Annotation{
+		Table: "virtual_path",
+	}
 }

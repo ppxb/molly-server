@@ -12,14 +12,42 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// APIKey is the client for interacting with the APIKey builders.
+	APIKey *APIKeyClient
+	// DownloadTask is the client for interacting with the DownloadTask builders.
+	DownloadTask *DownloadTaskClient
 	// Drive is the client for interacting with the Drive builders.
 	Drive *DriveClient
 	// Entry is the client for interacting with the Entry builders.
 	Entry *EntryClient
+	// FileChunk is the client for interacting with the FileChunk builders.
+	FileChunk *FileChunkClient
+	// FileInfo is the client for interacting with the FileInfo builders.
+	FileInfo *FileInfoClient
+	// Group is the client for interacting with the Group builders.
+	Group *GroupClient
+	// GroupPower is the client for interacting with the GroupPower builders.
+	GroupPower *GroupPowerClient
+	// Power is the client for interacting with the Power builders.
+	Power *PowerClient
+	// Recycled is the client for interacting with the Recycled builders.
+	Recycled *RecycledClient
+	// Share is the client for interacting with the Share builders.
+	Share *ShareClient
+	// UploadChunk is the client for interacting with the UploadChunk builders.
+	UploadChunk *UploadChunkClient
 	// UploadPart is the client for interacting with the UploadPart builders.
 	UploadPart *UploadPartClient
 	// UploadSession is the client for interacting with the UploadSession builders.
 	UploadSession *UploadSessionClient
+	// UploadTask is the client for interacting with the UploadTask builders.
+	UploadTask *UploadTaskClient
+	// User is the client for interacting with the User builders.
+	User *UserClient
+	// UserFile is the client for interacting with the UserFile builders.
+	UserFile *UserFileClient
+	// VirtualPath is the client for interacting with the VirtualPath builders.
+	VirtualPath *VirtualPathClient
 
 	// lazily loaded.
 	client     *Client
@@ -151,10 +179,24 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.APIKey = NewAPIKeyClient(tx.config)
+	tx.DownloadTask = NewDownloadTaskClient(tx.config)
 	tx.Drive = NewDriveClient(tx.config)
 	tx.Entry = NewEntryClient(tx.config)
+	tx.FileChunk = NewFileChunkClient(tx.config)
+	tx.FileInfo = NewFileInfoClient(tx.config)
+	tx.Group = NewGroupClient(tx.config)
+	tx.GroupPower = NewGroupPowerClient(tx.config)
+	tx.Power = NewPowerClient(tx.config)
+	tx.Recycled = NewRecycledClient(tx.config)
+	tx.Share = NewShareClient(tx.config)
+	tx.UploadChunk = NewUploadChunkClient(tx.config)
 	tx.UploadPart = NewUploadPartClient(tx.config)
 	tx.UploadSession = NewUploadSessionClient(tx.config)
+	tx.UploadTask = NewUploadTaskClient(tx.config)
+	tx.User = NewUserClient(tx.config)
+	tx.UserFile = NewUserFileClient(tx.config)
+	tx.VirtualPath = NewVirtualPathClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -164,7 +206,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Drive.QueryXXX(), the query will be executed
+// applies a query, for example: APIKey.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

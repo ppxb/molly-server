@@ -6,10 +6,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"molly-server/ent/apikey"
+	"molly-server/ent/downloadtask"
 	"molly-server/ent/drive"
 	"molly-server/ent/entry"
+	"molly-server/ent/filechunk"
+	"molly-server/ent/fileinfo"
+	"molly-server/ent/group"
+	"molly-server/ent/grouppower"
+	"molly-server/ent/power"
+	"molly-server/ent/recycled"
+	"molly-server/ent/share"
+	"molly-server/ent/uploadchunk"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
+	"molly-server/ent/uploadtask"
+	"molly-server/ent/user"
+	"molly-server/ent/userfile"
+	"molly-server/ent/virtualpath"
 	"reflect"
 	"sync"
 
@@ -76,10 +90,24 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			apikey.Table:        apikey.ValidColumn,
+			downloadtask.Table:  downloadtask.ValidColumn,
 			drive.Table:         drive.ValidColumn,
 			entry.Table:         entry.ValidColumn,
+			filechunk.Table:     filechunk.ValidColumn,
+			fileinfo.Table:      fileinfo.ValidColumn,
+			group.Table:         group.ValidColumn,
+			grouppower.Table:    grouppower.ValidColumn,
+			power.Table:         power.ValidColumn,
+			recycled.Table:      recycled.ValidColumn,
+			share.Table:         share.ValidColumn,
+			uploadchunk.Table:   uploadchunk.ValidColumn,
 			uploadpart.Table:    uploadpart.ValidColumn,
 			uploadsession.Table: uploadsession.ValidColumn,
+			uploadtask.Table:    uploadtask.ValidColumn,
+			user.Table:          user.ValidColumn,
+			userfile.Table:      userfile.ValidColumn,
+			virtualpath.Table:   virtualpath.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

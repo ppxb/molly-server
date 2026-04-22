@@ -1,0 +1,95 @@
+# ============================================================
+#  Molly — config/config.toml
+#  敏感字段建议通过环境变量覆盖，规则：MYOBJ_<SECTION>_<FIELD>
+#  例如：MYOBJ_AUTH_SECRET=xxx  MYOBJ_DATABASE_PASSWORD=xxx
+# ============================================================
+
+[app]
+env = "development"   # development | production | test
+
+[server]
+host = "0.0.0.0"
+port = 9527
+read_timeout = "30s"
+write_timeout = "30s"
+ssl = false
+ssl_key = ""
+ssl_cert = ""
+swagger = true
+
+[auth]
+secret = "CHANGE_ME_USE_A_32_CHAR_MIN_SECRET"
+api_key = false
+jwt_expire = 120
+
+[log]
+level = "info"    # debug | info | warn | error
+log_path = "stdout"  # stdout 或文件路径，如 /var/log/molly.log
+max_size = 100       # MB，仅写文件时生效
+max_age = 30        # days，仅写文件时生效
+
+[database]
+type = "postgres"   # sqlite | mysql
+host = "127.0.0.1"
+port = 5432
+user = "postgres"
+password = "123456"
+db_name = "molly"
+max_open = 25
+max_idle = 10
+max_life = "5m"
+max_idle_life = "10m"
+
+[storage]
+driver = "local"   # local | minio
+
+[storage.local]
+data_dir = "./data/uploads"
+temp_dir = "./data/tmp"
+base_url = "http://localhost:8080/files"
+
+[storage.minio]
+endpoint = "play.min.io"
+region = "us-east-1"
+bucket = "molly"
+access_key_id = ""
+secret_access_key = ""
+use_ssl = true
+
+[file]
+thumbnail = true
+big_file_threshold = 1073741824   # 1 GiB
+big_chunk_size = 67108864      # 64 MiB
+
+[cors]
+enable = true
+allow_origins = "*"
+allow_methods = "GET,POST,PUT,DELETE,OPTIONS"
+allow_headers = "Content-Type,Authorization"
+allow_credentials = false
+expose_headers = ""
+
+[cache]
+type = "memory"   # memory | redis
+ttl = "10m"
+
+[cache.redis]
+addr = "127.0.0.1:6379"
+password = ""
+db = 0
+pool_size = 10
+
+[webdav]
+enable = false
+host = "0.0.0.0"
+port = 8081
+prefix = "/dav"
+
+[s3]
+enable = false
+share_port = true     # true 则与主服务共用端口
+port = 9000     # share_port=false 时生效
+region = "us-east-1"
+path_prefix = "/s3"
+encryption_master_key = ""      # 建议通过 MYOBJ_S3_ENCRYPTION_MASTER_KEY 注入
+operation_timeout = 30       # seconds

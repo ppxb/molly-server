@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	App      AppConfig      `mapstructure:"app"`
 	Server   ServerConfig   `mapstructure:"server"`
 	Auth     AuthConfig     `mapstructure:"auth"`
 	Log      LogConfig      `mapstructure:"log"`
@@ -20,6 +21,10 @@ type Config struct {
 	Cache    CacheConfig    `mapstructure:"cache"`
 	WebDAV   WebDAVConfig   `mapstructure:"webdav"`
 	S3       S3Config       `mapstructure:"s3"`
+}
+
+type AppConfig struct {
+	Env string `mapstructure:"env"` // development | production | test
 }
 
 type ServerConfig struct {
@@ -135,7 +140,7 @@ func MustLoad(path string) *Config {
 	once.Do(func() {
 		cfg, err := load(path)
 		if err != nil {
-			panic(fmt.Sprintf("[INITIALIZE] load config err: %v", err))
+			panic(fmt.Sprintf("load config err: %v", err))
 		}
 		global = cfg
 	})

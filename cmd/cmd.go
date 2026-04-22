@@ -13,6 +13,7 @@ import (
 
 	"molly-server/internal/infrastructure/config"
 	"molly-server/internal/infrastructure/persistence"
+	"molly-server/internal/presentation/http"
 	"molly-server/pkg/logger"
 )
 
@@ -33,7 +34,7 @@ func main() {
 			&cli.StringFlag{
 				Name:    "config",
 				Aliases: []string{"c"},
-				Value:   "config/config.toml",
+				Value:   "configs/config.toml",
 				Usage:   "Path to config file",
 				EnvVars: []string{"MOLLY_CONFIG"},
 			},
@@ -56,9 +57,10 @@ func cmdServer() *cli.Command {
 		Action: func(ctx *cli.Context) error {
 			cfg := config.MustLoad(ctx.String("config"))
 			appLog := mustInitLogger(cfg)
-			_ = mustInitDB(cfg, appLog)
+			db := mustInitDB(cfg, appLog)
 
-			return nil
+			srv := http.NewServer(cfg, db, appLog)
+			return runUntilSignal(srv.Start, srv.Shutdown, appLog)
 		},
 	}
 }
@@ -123,7 +125,6 @@ func runUntilSignal(start func() error, shutdown func(ctx context.Context) error
 			appLog.Error("shutdown error", "error", err)
 			return err
 		}
-		appLog.Info("server stopped")
 		return nil
 	}
 }

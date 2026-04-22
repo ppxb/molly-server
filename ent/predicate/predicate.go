@@ -17,6 +17,3 @@ type UploadPart func(*sql.Selector)
 
 // UploadSession is the predicate function for uploadsession builders.
 type UploadSession func(*sql.Selector)
-
-// User is the predicate function for user builders.
-type User func(*sql.Selector)

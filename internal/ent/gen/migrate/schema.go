@@ -795,6 +795,8 @@ var (
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "nick_name", Type: field.TypeString},
 		{Name: "user_name", Type: field.TypeString, Unique: true},
 		{Name: "password", Type: field.TypeString},
@@ -804,7 +806,6 @@ var (
 		{Name: "free_space", Type: field.TypeInt64, Default: 0},
 		{Name: "file_password", Type: field.TypeString, Nullable: true, Default: ""},
 		{Name: "state", Type: field.TypeInt, Default: 0},
-		{Name: "created_at", Type: field.TypeTime},
 		{Name: "group_id", Type: field.TypeInt},
 	}
 	// UsersTable holds the schema information for the "users" table.
@@ -815,7 +816,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_groups_users",
-				Columns:    []*schema.Column{UsersColumns[11]},
+				Columns:    []*schema.Column{UsersColumns[12]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},

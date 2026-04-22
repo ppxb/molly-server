@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"time"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
@@ -34,7 +32,6 @@ func (User) Fields() []ent.Field {
 		field.Int64("free_space").Default(0).Comment("剩余存储空间（字节）"),
 		field.String("file_password").Optional().Default("").Comment("文件访问密码"),
 		field.Int("state").Default(0).Comment("0=正常 1=禁用"),
-		field.Time("created_at").Default(time.Now).Immutable().Comment("创建时间"),
 	}
 }
 

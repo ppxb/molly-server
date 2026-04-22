@@ -14,6 +14,7 @@ import (
 	"molly-server/internal/infrastructure/config"
 	"molly-server/internal/infrastructure/persistence"
 	"molly-server/internal/presentation/http"
+	"molly-server/pkg/auth"
 	"molly-server/pkg/logger"
 )
 
@@ -56,11 +57,14 @@ func cmdServer() *cli.Command {
 		Usage: "Start the web server",
 		Action: func(ctx *cli.Context) error {
 			cfg := config.MustLoad(ctx.String("config"))
-			appLog := mustInitLogger(cfg)
-			db := mustInitDB(cfg, appLog)
+			log := mustInitLogger(cfg)
 
-			srv := http.NewServer(cfg, db, appLog)
-			return runUntilSignal(srv.Start, srv.Shutdown, appLog)
+			auth.Init(cfg.Auth.Secret)
+
+			db := mustInitDB(cfg, log)
+
+			srv := http.NewServer(cfg, db, log)
+			return runUntilSignal(srv.Start, srv.Shutdown, log)
 		},
 	}
 }
@@ -71,17 +75,18 @@ func cmdMigrate() *cli.Command {
 		Usage: "Run database schema migrations",
 		Action: func(cliCtx *cli.Context) error {
 			cfg := config.MustLoad(cliCtx.String("config"))
-			appLog := mustInitLogger(cfg)
-			db := mustInitDB(cfg, appLog)
-			defer db.Close()
+			log := mustInitLogger(cfg)
+			db := mustInitDB(cfg, log)
+			defer func() {
+				if err := db.Close(); err != nil {
+					log.Error("close db", "error", err)
+				}
+			}()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 
-			if err := persistence.Migrate(ctx, db, appLog); err != nil {
-				return fmt.Errorf("migrate: %w", err)
-			}
-			return nil
+			return persistence.Migrate(ctx, db, log)
 		},
 	}
 }
@@ -89,26 +94,29 @@ func cmdMigrate() *cli.Command {
 func mustInitLogger(cfg *config.Config) *logger.Logger {
 	l, err := logger.New(cfg.Log)
 	if err != nil {
-		stdlog.Printf("warn: %v", err)
+		// parseLevel 返回的是非致命降级错误，打印 warn 后继续
+		stdlog.Printf("warn: logger: %v", err)
 	}
 	return l
 }
 
-func mustInitDB(cfg *config.Config, appLog *logger.Logger) *persistence.DB {
-	db, err := persistence.Open(cfg.Database, appLog)
+func mustInitDB(cfg *config.Config, log *logger.Logger) *persistence.DB {
+	db, err := persistence.Open(cfg.Database, log)
 	if err != nil {
-		appLog.Error("database init failed", "error", err)
+		log.Error("database init failed", "error", err)
 		os.Exit(1)
 	}
 	return db
 }
 
-func runUntilSignal(start func() error, shutdown func(ctx context.Context) error, appLog *logger.Logger) error {
+func runUntilSignal(start func() error, shutdown func(ctx context.Context) error, log *logger.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	errCh := make(chan error, 1)
-	go func() { errCh <- start() }()
+	go func() {
+		errCh <- start()
+	}()
 
 	select {
 	case err := <-errCh:
@@ -116,14 +124,14 @@ func runUntilSignal(start func() error, shutdown func(ctx context.Context) error
 		return err
 	case <-ctx.Done():
 		// receive exit signal
-		appLog.Info("shutting down gracefully...")
+		log.Info("shutting down gracefully...")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		if err := shutdown(shutdownCtx); err != nil {
-			appLog.Error("shutdown error", "error", err)
-			return err
+			log.Error("shutdown error", "error", err)
+			return fmt.Errorf("shutdown: %w", err)
 		}
 		return nil
 	}

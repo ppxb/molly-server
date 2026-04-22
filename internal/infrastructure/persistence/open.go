@@ -12,7 +12,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 
-	"molly-server/ent"
+	ent "molly-server/internal/ent/gen"
 	"molly-server/internal/infrastructure/config"
 	"molly-server/pkg/logger"
 )

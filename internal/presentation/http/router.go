@@ -5,6 +5,7 @@ import (
 
 	"molly-server/internal/infrastructure/config"
 	"molly-server/internal/infrastructure/persistence"
+	"molly-server/internal/presentation/http/middleware"
 	"molly-server/pkg/logger"
 )
 
@@ -12,6 +13,12 @@ func newRouter(cfg *config.Config, db *persistence.DB, log *logger.Logger) *gin.
 	setGinMode(cfg.App.Env)
 
 	r := gin.New()
+
+	r.Use(
+		middleware.Logger(log),
+		middleware.Recovery(log),
+		middleware.CORS(cfg.Cors),
+	)
 
 	return r
 }

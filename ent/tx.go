@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// APIKey is the client for interacting with the APIKey builders.
 	APIKey *APIKeyClient
+	// Disk is the client for interacting with the Disk builders.
+	Disk *DiskClient
 	// DownloadTask is the client for interacting with the DownloadTask builders.
 	DownloadTask *DownloadTaskClient
 	// Drive is the client for interacting with the Drive builders.
@@ -32,8 +34,32 @@ type Tx struct {
 	Power *PowerClient
 	// Recycled is the client for interacting with the Recycled builders.
 	Recycled *RecycledClient
+	// S3Bucket is the client for interacting with the S3Bucket builders.
+	S3Bucket *S3BucketClient
+	// S3BucketACL is the client for interacting with the S3BucketACL builders.
+	S3BucketACL *S3BucketACLClient
+	// S3BucketCORS is the client for interacting with the S3BucketCORS builders.
+	S3BucketCORS *S3BucketCORSClient
+	// S3BucketLifecycle is the client for interacting with the S3BucketLifecycle builders.
+	S3BucketLifecycle *S3BucketLifecycleClient
+	// S3BucketPolicy is the client for interacting with the S3BucketPolicy builders.
+	S3BucketPolicy *S3BucketPolicyClient
+	// S3EncryptionKey is the client for interacting with the S3EncryptionKey builders.
+	S3EncryptionKey *S3EncryptionKeyClient
+	// S3MultipartPart is the client for interacting with the S3MultipartPart builders.
+	S3MultipartPart *S3MultipartPartClient
+	// S3MultipartUpload is the client for interacting with the S3MultipartUpload builders.
+	S3MultipartUpload *S3MultipartUploadClient
+	// S3Object is the client for interacting with the S3Object builders.
+	S3Object *S3ObjectClient
+	// S3ObjectACL is the client for interacting with the S3ObjectACL builders.
+	S3ObjectACL *S3ObjectACLClient
+	// S3ObjectEncryption is the client for interacting with the S3ObjectEncryption builders.
+	S3ObjectEncryption *S3ObjectEncryptionClient
 	// Share is the client for interacting with the Share builders.
 	Share *ShareClient
+	// SysConfig is the client for interacting with the SysConfig builders.
+	SysConfig *SysConfigClient
 	// UploadChunk is the client for interacting with the UploadChunk builders.
 	UploadChunk *UploadChunkClient
 	// UploadPart is the client for interacting with the UploadPart builders.
@@ -180,6 +206,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
+	tx.Disk = NewDiskClient(tx.config)
 	tx.DownloadTask = NewDownloadTaskClient(tx.config)
 	tx.Drive = NewDriveClient(tx.config)
 	tx.Entry = NewEntryClient(tx.config)
@@ -189,7 +216,19 @@ func (tx *Tx) init() {
 	tx.GroupPower = NewGroupPowerClient(tx.config)
 	tx.Power = NewPowerClient(tx.config)
 	tx.Recycled = NewRecycledClient(tx.config)
+	tx.S3Bucket = NewS3BucketClient(tx.config)
+	tx.S3BucketACL = NewS3BucketACLClient(tx.config)
+	tx.S3BucketCORS = NewS3BucketCORSClient(tx.config)
+	tx.S3BucketLifecycle = NewS3BucketLifecycleClient(tx.config)
+	tx.S3BucketPolicy = NewS3BucketPolicyClient(tx.config)
+	tx.S3EncryptionKey = NewS3EncryptionKeyClient(tx.config)
+	tx.S3MultipartPart = NewS3MultipartPartClient(tx.config)
+	tx.S3MultipartUpload = NewS3MultipartUploadClient(tx.config)
+	tx.S3Object = NewS3ObjectClient(tx.config)
+	tx.S3ObjectACL = NewS3ObjectACLClient(tx.config)
+	tx.S3ObjectEncryption = NewS3ObjectEncryptionClient(tx.config)
 	tx.Share = NewShareClient(tx.config)
+	tx.SysConfig = NewSysConfigClient(tx.config)
 	tx.UploadChunk = NewUploadChunkClient(tx.config)
 	tx.UploadPart = NewUploadPartClient(tx.config)
 	tx.UploadSession = NewUploadSessionClient(tx.config)

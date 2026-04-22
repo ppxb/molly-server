@@ -12,6 +12,17 @@ import (
 	"molly-server/ent/group"
 	"molly-server/ent/power"
 	"molly-server/ent/recycled"
+	"molly-server/ent/s3bucket"
+	"molly-server/ent/s3bucketacl"
+	"molly-server/ent/s3bucketcors"
+	"molly-server/ent/s3bucketlifecycle"
+	"molly-server/ent/s3bucketpolicy"
+	"molly-server/ent/s3encryptionkey"
+	"molly-server/ent/s3multipartpart"
+	"molly-server/ent/s3multipartupload"
+	"molly-server/ent/s3object"
+	"molly-server/ent/s3objectacl"
+	"molly-server/ent/s3objectencryption"
 	"molly-server/ent/schema"
 	"molly-server/ent/share"
 	"molly-server/ent/uploadpart"
@@ -281,6 +292,354 @@ func init() {
 	recycledDescID := recycledFields[0].Descriptor()
 	// recycled.DefaultID holds the default value on creation for the id field.
 	recycled.DefaultID = recycledDescID.Default.(func() string)
+	s3bucketFields := schema.S3Bucket{}.Fields()
+	_ = s3bucketFields
+	// s3bucketDescBucketName is the schema descriptor for bucket_name field.
+	s3bucketDescBucketName := s3bucketFields[0].Descriptor()
+	// s3bucket.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3bucket.BucketNameValidator = s3bucketDescBucketName.Validators[0].(func(string) error)
+	// s3bucketDescUserID is the schema descriptor for user_id field.
+	s3bucketDescUserID := s3bucketFields[1].Descriptor()
+	// s3bucket.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3bucket.UserIDValidator = s3bucketDescUserID.Validators[0].(func(string) error)
+	// s3bucketDescRegion is the schema descriptor for region field.
+	s3bucketDescRegion := s3bucketFields[2].Descriptor()
+	// s3bucket.DefaultRegion holds the default value on creation for the region field.
+	s3bucket.DefaultRegion = s3bucketDescRegion.Default.(string)
+	// s3bucket.RegionValidator is a validator for the "region" field. It is called by the builders before save.
+	s3bucket.RegionValidator = s3bucketDescRegion.Validators[0].(func(string) error)
+	// s3bucketDescVersioning is the schema descriptor for versioning field.
+	s3bucketDescVersioning := s3bucketFields[4].Descriptor()
+	// s3bucket.DefaultVersioning holds the default value on creation for the versioning field.
+	s3bucket.DefaultVersioning = s3bucketDescVersioning.Default.(string)
+	// s3bucket.VersioningValidator is a validator for the "versioning" field. It is called by the builders before save.
+	s3bucket.VersioningValidator = s3bucketDescVersioning.Validators[0].(func(string) error)
+	// s3bucketDescCreatedAt is the schema descriptor for created_at field.
+	s3bucketDescCreatedAt := s3bucketFields[5].Descriptor()
+	// s3bucket.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3bucket.DefaultCreatedAt = s3bucketDescCreatedAt.Default.(func() time.Time)
+	// s3bucketDescUpdatedAt is the schema descriptor for updated_at field.
+	s3bucketDescUpdatedAt := s3bucketFields[6].Descriptor()
+	// s3bucket.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3bucket.DefaultUpdatedAt = s3bucketDescUpdatedAt.Default.(func() time.Time)
+	// s3bucket.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3bucket.UpdateDefaultUpdatedAt = s3bucketDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3bucketaclFields := schema.S3BucketACL{}.Fields()
+	_ = s3bucketaclFields
+	// s3bucketaclDescBucketName is the schema descriptor for bucket_name field.
+	s3bucketaclDescBucketName := s3bucketaclFields[0].Descriptor()
+	// s3bucketacl.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3bucketacl.BucketNameValidator = s3bucketaclDescBucketName.Validators[0].(func(string) error)
+	// s3bucketaclDescUserID is the schema descriptor for user_id field.
+	s3bucketaclDescUserID := s3bucketaclFields[1].Descriptor()
+	// s3bucketacl.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3bucketacl.UserIDValidator = s3bucketaclDescUserID.Validators[0].(func(string) error)
+	// s3bucketaclDescCreatedAt is the schema descriptor for created_at field.
+	s3bucketaclDescCreatedAt := s3bucketaclFields[3].Descriptor()
+	// s3bucketacl.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3bucketacl.DefaultCreatedAt = s3bucketaclDescCreatedAt.Default.(func() time.Time)
+	// s3bucketaclDescUpdatedAt is the schema descriptor for updated_at field.
+	s3bucketaclDescUpdatedAt := s3bucketaclFields[4].Descriptor()
+	// s3bucketacl.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3bucketacl.DefaultUpdatedAt = s3bucketaclDescUpdatedAt.Default.(func() time.Time)
+	// s3bucketacl.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3bucketacl.UpdateDefaultUpdatedAt = s3bucketaclDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3bucketcorsFields := schema.S3BucketCORS{}.Fields()
+	_ = s3bucketcorsFields
+	// s3bucketcorsDescBucketName is the schema descriptor for bucket_name field.
+	s3bucketcorsDescBucketName := s3bucketcorsFields[0].Descriptor()
+	// s3bucketcors.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3bucketcors.BucketNameValidator = s3bucketcorsDescBucketName.Validators[0].(func(string) error)
+	// s3bucketcorsDescUserID is the schema descriptor for user_id field.
+	s3bucketcorsDescUserID := s3bucketcorsFields[1].Descriptor()
+	// s3bucketcors.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3bucketcors.UserIDValidator = s3bucketcorsDescUserID.Validators[0].(func(string) error)
+	// s3bucketcorsDescCreatedAt is the schema descriptor for created_at field.
+	s3bucketcorsDescCreatedAt := s3bucketcorsFields[3].Descriptor()
+	// s3bucketcors.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3bucketcors.DefaultCreatedAt = s3bucketcorsDescCreatedAt.Default.(func() time.Time)
+	// s3bucketcorsDescUpdatedAt is the schema descriptor for updated_at field.
+	s3bucketcorsDescUpdatedAt := s3bucketcorsFields[4].Descriptor()
+	// s3bucketcors.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3bucketcors.DefaultUpdatedAt = s3bucketcorsDescUpdatedAt.Default.(func() time.Time)
+	// s3bucketcors.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3bucketcors.UpdateDefaultUpdatedAt = s3bucketcorsDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3bucketlifecycleFields := schema.S3BucketLifecycle{}.Fields()
+	_ = s3bucketlifecycleFields
+	// s3bucketlifecycleDescBucketName is the schema descriptor for bucket_name field.
+	s3bucketlifecycleDescBucketName := s3bucketlifecycleFields[0].Descriptor()
+	// s3bucketlifecycle.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3bucketlifecycle.BucketNameValidator = s3bucketlifecycleDescBucketName.Validators[0].(func(string) error)
+	// s3bucketlifecycleDescUserID is the schema descriptor for user_id field.
+	s3bucketlifecycleDescUserID := s3bucketlifecycleFields[1].Descriptor()
+	// s3bucketlifecycle.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3bucketlifecycle.UserIDValidator = s3bucketlifecycleDescUserID.Validators[0].(func(string) error)
+	// s3bucketlifecycleDescCreatedAt is the schema descriptor for created_at field.
+	s3bucketlifecycleDescCreatedAt := s3bucketlifecycleFields[3].Descriptor()
+	// s3bucketlifecycle.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3bucketlifecycle.DefaultCreatedAt = s3bucketlifecycleDescCreatedAt.Default.(func() time.Time)
+	// s3bucketlifecycleDescUpdatedAt is the schema descriptor for updated_at field.
+	s3bucketlifecycleDescUpdatedAt := s3bucketlifecycleFields[4].Descriptor()
+	// s3bucketlifecycle.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3bucketlifecycle.DefaultUpdatedAt = s3bucketlifecycleDescUpdatedAt.Default.(func() time.Time)
+	// s3bucketlifecycle.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3bucketlifecycle.UpdateDefaultUpdatedAt = s3bucketlifecycleDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3bucketpolicyFields := schema.S3BucketPolicy{}.Fields()
+	_ = s3bucketpolicyFields
+	// s3bucketpolicyDescBucketName is the schema descriptor for bucket_name field.
+	s3bucketpolicyDescBucketName := s3bucketpolicyFields[0].Descriptor()
+	// s3bucketpolicy.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3bucketpolicy.BucketNameValidator = s3bucketpolicyDescBucketName.Validators[0].(func(string) error)
+	// s3bucketpolicyDescUserID is the schema descriptor for user_id field.
+	s3bucketpolicyDescUserID := s3bucketpolicyFields[1].Descriptor()
+	// s3bucketpolicy.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3bucketpolicy.UserIDValidator = s3bucketpolicyDescUserID.Validators[0].(func(string) error)
+	// s3bucketpolicyDescCreatedAt is the schema descriptor for created_at field.
+	s3bucketpolicyDescCreatedAt := s3bucketpolicyFields[3].Descriptor()
+	// s3bucketpolicy.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3bucketpolicy.DefaultCreatedAt = s3bucketpolicyDescCreatedAt.Default.(func() time.Time)
+	// s3bucketpolicyDescUpdatedAt is the schema descriptor for updated_at field.
+	s3bucketpolicyDescUpdatedAt := s3bucketpolicyFields[4].Descriptor()
+	// s3bucketpolicy.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3bucketpolicy.DefaultUpdatedAt = s3bucketpolicyDescUpdatedAt.Default.(func() time.Time)
+	// s3bucketpolicy.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3bucketpolicy.UpdateDefaultUpdatedAt = s3bucketpolicyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3encryptionkeyFields := schema.S3EncryptionKey{}.Fields()
+	_ = s3encryptionkeyFields
+	// s3encryptionkeyDescKeyID is the schema descriptor for key_id field.
+	s3encryptionkeyDescKeyID := s3encryptionkeyFields[0].Descriptor()
+	// s3encryptionkey.KeyIDValidator is a validator for the "key_id" field. It is called by the builders before save.
+	s3encryptionkey.KeyIDValidator = s3encryptionkeyDescKeyID.Validators[0].(func(string) error)
+	// s3encryptionkeyDescAlgorithm is the schema descriptor for algorithm field.
+	s3encryptionkeyDescAlgorithm := s3encryptionkeyFields[2].Descriptor()
+	// s3encryptionkey.DefaultAlgorithm holds the default value on creation for the algorithm field.
+	s3encryptionkey.DefaultAlgorithm = s3encryptionkeyDescAlgorithm.Default.(string)
+	// s3encryptionkey.AlgorithmValidator is a validator for the "algorithm" field. It is called by the builders before save.
+	s3encryptionkey.AlgorithmValidator = s3encryptionkeyDescAlgorithm.Validators[0].(func(string) error)
+	// s3encryptionkeyDescCreatedAt is the schema descriptor for created_at field.
+	s3encryptionkeyDescCreatedAt := s3encryptionkeyFields[3].Descriptor()
+	// s3encryptionkey.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3encryptionkey.DefaultCreatedAt = s3encryptionkeyDescCreatedAt.Default.(func() time.Time)
+	// s3encryptionkeyDescUpdatedAt is the schema descriptor for updated_at field.
+	s3encryptionkeyDescUpdatedAt := s3encryptionkeyFields[4].Descriptor()
+	// s3encryptionkey.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3encryptionkey.DefaultUpdatedAt = s3encryptionkeyDescUpdatedAt.Default.(func() time.Time)
+	// s3encryptionkey.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3encryptionkey.UpdateDefaultUpdatedAt = s3encryptionkeyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3multipartpartFields := schema.S3MultipartPart{}.Fields()
+	_ = s3multipartpartFields
+	// s3multipartpartDescUploadID is the schema descriptor for upload_id field.
+	s3multipartpartDescUploadID := s3multipartpartFields[0].Descriptor()
+	// s3multipartpart.UploadIDValidator is a validator for the "upload_id" field. It is called by the builders before save.
+	s3multipartpart.UploadIDValidator = s3multipartpartDescUploadID.Validators[0].(func(string) error)
+	// s3multipartpartDescEtag is the schema descriptor for etag field.
+	s3multipartpartDescEtag := s3multipartpartFields[2].Descriptor()
+	// s3multipartpart.EtagValidator is a validator for the "etag" field. It is called by the builders before save.
+	s3multipartpart.EtagValidator = s3multipartpartDescEtag.Validators[0].(func(string) error)
+	// s3multipartpartDescChunkPath is the schema descriptor for chunk_path field.
+	s3multipartpartDescChunkPath := s3multipartpartFields[4].Descriptor()
+	// s3multipartpart.DefaultChunkPath holds the default value on creation for the chunk_path field.
+	s3multipartpart.DefaultChunkPath = s3multipartpartDescChunkPath.Default.(string)
+	// s3multipartpart.ChunkPathValidator is a validator for the "chunk_path" field. It is called by the builders before save.
+	s3multipartpart.ChunkPathValidator = s3multipartpartDescChunkPath.Validators[0].(func(string) error)
+	// s3multipartpartDescCreatedAt is the schema descriptor for created_at field.
+	s3multipartpartDescCreatedAt := s3multipartpartFields[5].Descriptor()
+	// s3multipartpart.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3multipartpart.DefaultCreatedAt = s3multipartpartDescCreatedAt.Default.(func() time.Time)
+	s3multipartuploadFields := schema.S3MultipartUpload{}.Fields()
+	_ = s3multipartuploadFields
+	// s3multipartuploadDescUploadID is the schema descriptor for upload_id field.
+	s3multipartuploadDescUploadID := s3multipartuploadFields[0].Descriptor()
+	// s3multipartupload.UploadIDValidator is a validator for the "upload_id" field. It is called by the builders before save.
+	s3multipartupload.UploadIDValidator = s3multipartuploadDescUploadID.Validators[0].(func(string) error)
+	// s3multipartuploadDescBucketName is the schema descriptor for bucket_name field.
+	s3multipartuploadDescBucketName := s3multipartuploadFields[1].Descriptor()
+	// s3multipartupload.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3multipartupload.BucketNameValidator = s3multipartuploadDescBucketName.Validators[0].(func(string) error)
+	// s3multipartuploadDescObjectKey is the schema descriptor for object_key field.
+	s3multipartuploadDescObjectKey := s3multipartuploadFields[2].Descriptor()
+	// s3multipartupload.ObjectKeyValidator is a validator for the "object_key" field. It is called by the builders before save.
+	s3multipartupload.ObjectKeyValidator = s3multipartuploadDescObjectKey.Validators[0].(func(string) error)
+	// s3multipartuploadDescUserID is the schema descriptor for user_id field.
+	s3multipartuploadDescUserID := s3multipartuploadFields[3].Descriptor()
+	// s3multipartupload.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3multipartupload.UserIDValidator = s3multipartuploadDescUserID.Validators[0].(func(string) error)
+	// s3multipartuploadDescMetadata is the schema descriptor for metadata field.
+	s3multipartuploadDescMetadata := s3multipartuploadFields[4].Descriptor()
+	// s3multipartupload.DefaultMetadata holds the default value on creation for the metadata field.
+	s3multipartupload.DefaultMetadata = s3multipartuploadDescMetadata.Default.(string)
+	// s3multipartuploadDescStatus is the schema descriptor for status field.
+	s3multipartuploadDescStatus := s3multipartuploadFields[5].Descriptor()
+	// s3multipartupload.DefaultStatus holds the default value on creation for the status field.
+	s3multipartupload.DefaultStatus = s3multipartuploadDescStatus.Default.(string)
+	// s3multipartupload.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	s3multipartupload.StatusValidator = s3multipartuploadDescStatus.Validators[0].(func(string) error)
+	// s3multipartuploadDescCreatedAt is the schema descriptor for created_at field.
+	s3multipartuploadDescCreatedAt := s3multipartuploadFields[6].Descriptor()
+	// s3multipartupload.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3multipartupload.DefaultCreatedAt = s3multipartuploadDescCreatedAt.Default.(func() time.Time)
+	// s3multipartuploadDescUpdatedAt is the schema descriptor for updated_at field.
+	s3multipartuploadDescUpdatedAt := s3multipartuploadFields[7].Descriptor()
+	// s3multipartupload.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3multipartupload.DefaultUpdatedAt = s3multipartuploadDescUpdatedAt.Default.(func() time.Time)
+	// s3multipartupload.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3multipartupload.UpdateDefaultUpdatedAt = s3multipartuploadDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3objectFields := schema.S3Object{}.Fields()
+	_ = s3objectFields
+	// s3objectDescFileID is the schema descriptor for file_id field.
+	s3objectDescFileID := s3objectFields[0].Descriptor()
+	// s3object.DefaultFileID holds the default value on creation for the file_id field.
+	s3object.DefaultFileID = s3objectDescFileID.Default.(string)
+	// s3object.FileIDValidator is a validator for the "file_id" field. It is called by the builders before save.
+	s3object.FileIDValidator = s3objectDescFileID.Validators[0].(func(string) error)
+	// s3objectDescBucketName is the schema descriptor for bucket_name field.
+	s3objectDescBucketName := s3objectFields[1].Descriptor()
+	// s3object.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3object.BucketNameValidator = s3objectDescBucketName.Validators[0].(func(string) error)
+	// s3objectDescObjectKey is the schema descriptor for object_key field.
+	s3objectDescObjectKey := s3objectFields[2].Descriptor()
+	// s3object.ObjectKeyValidator is a validator for the "object_key" field. It is called by the builders before save.
+	s3object.ObjectKeyValidator = s3objectDescObjectKey.Validators[0].(func(string) error)
+	// s3objectDescUserID is the schema descriptor for user_id field.
+	s3objectDescUserID := s3objectFields[3].Descriptor()
+	// s3object.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3object.UserIDValidator = s3objectDescUserID.Validators[0].(func(string) error)
+	// s3objectDescEtag is the schema descriptor for etag field.
+	s3objectDescEtag := s3objectFields[4].Descriptor()
+	// s3object.DefaultEtag holds the default value on creation for the etag field.
+	s3object.DefaultEtag = s3objectDescEtag.Default.(string)
+	// s3object.EtagValidator is a validator for the "etag" field. It is called by the builders before save.
+	s3object.EtagValidator = s3objectDescEtag.Validators[0].(func(string) error)
+	// s3objectDescStorageClass is the schema descriptor for storage_class field.
+	s3objectDescStorageClass := s3objectFields[5].Descriptor()
+	// s3object.DefaultStorageClass holds the default value on creation for the storage_class field.
+	s3object.DefaultStorageClass = s3objectDescStorageClass.Default.(string)
+	// s3object.StorageClassValidator is a validator for the "storage_class" field. It is called by the builders before save.
+	s3object.StorageClassValidator = s3objectDescStorageClass.Validators[0].(func(string) error)
+	// s3objectDescContentType is the schema descriptor for content_type field.
+	s3objectDescContentType := s3objectFields[6].Descriptor()
+	// s3object.DefaultContentType holds the default value on creation for the content_type field.
+	s3object.DefaultContentType = s3objectDescContentType.Default.(string)
+	// s3object.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	s3object.ContentTypeValidator = s3objectDescContentType.Validators[0].(func(string) error)
+	// s3objectDescUserMetadata is the schema descriptor for user_metadata field.
+	s3objectDescUserMetadata := s3objectFields[7].Descriptor()
+	// s3object.DefaultUserMetadata holds the default value on creation for the user_metadata field.
+	s3object.DefaultUserMetadata = s3objectDescUserMetadata.Default.(string)
+	// s3objectDescTags is the schema descriptor for tags field.
+	s3objectDescTags := s3objectFields[8].Descriptor()
+	// s3object.DefaultTags holds the default value on creation for the tags field.
+	s3object.DefaultTags = s3objectDescTags.Default.(string)
+	// s3objectDescVersionID is the schema descriptor for version_id field.
+	s3objectDescVersionID := s3objectFields[9].Descriptor()
+	// s3object.DefaultVersionID holds the default value on creation for the version_id field.
+	s3object.DefaultVersionID = s3objectDescVersionID.Default.(string)
+	// s3object.VersionIDValidator is a validator for the "version_id" field. It is called by the builders before save.
+	s3object.VersionIDValidator = s3objectDescVersionID.Validators[0].(func(string) error)
+	// s3objectDescIsLatest is the schema descriptor for is_latest field.
+	s3objectDescIsLatest := s3objectFields[10].Descriptor()
+	// s3object.DefaultIsLatest holds the default value on creation for the is_latest field.
+	s3object.DefaultIsLatest = s3objectDescIsLatest.Default.(bool)
+	// s3objectDescIsDeleteMarker is the schema descriptor for is_delete_marker field.
+	s3objectDescIsDeleteMarker := s3objectFields[11].Descriptor()
+	// s3object.DefaultIsDeleteMarker holds the default value on creation for the is_delete_marker field.
+	s3object.DefaultIsDeleteMarker = s3objectDescIsDeleteMarker.Default.(bool)
+	// s3objectDescCreatedAt is the schema descriptor for created_at field.
+	s3objectDescCreatedAt := s3objectFields[12].Descriptor()
+	// s3object.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3object.DefaultCreatedAt = s3objectDescCreatedAt.Default.(func() time.Time)
+	// s3objectDescUpdatedAt is the schema descriptor for updated_at field.
+	s3objectDescUpdatedAt := s3objectFields[13].Descriptor()
+	// s3object.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3object.DefaultUpdatedAt = s3objectDescUpdatedAt.Default.(func() time.Time)
+	// s3object.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3object.UpdateDefaultUpdatedAt = s3objectDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3objectaclFields := schema.S3ObjectACL{}.Fields()
+	_ = s3objectaclFields
+	// s3objectaclDescBucketName is the schema descriptor for bucket_name field.
+	s3objectaclDescBucketName := s3objectaclFields[0].Descriptor()
+	// s3objectacl.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3objectacl.BucketNameValidator = s3objectaclDescBucketName.Validators[0].(func(string) error)
+	// s3objectaclDescObjectKey is the schema descriptor for object_key field.
+	s3objectaclDescObjectKey := s3objectaclFields[1].Descriptor()
+	// s3objectacl.ObjectKeyValidator is a validator for the "object_key" field. It is called by the builders before save.
+	s3objectacl.ObjectKeyValidator = s3objectaclDescObjectKey.Validators[0].(func(string) error)
+	// s3objectaclDescVersionID is the schema descriptor for version_id field.
+	s3objectaclDescVersionID := s3objectaclFields[2].Descriptor()
+	// s3objectacl.DefaultVersionID holds the default value on creation for the version_id field.
+	s3objectacl.DefaultVersionID = s3objectaclDescVersionID.Default.(string)
+	// s3objectacl.VersionIDValidator is a validator for the "version_id" field. It is called by the builders before save.
+	s3objectacl.VersionIDValidator = s3objectaclDescVersionID.Validators[0].(func(string) error)
+	// s3objectaclDescUserID is the schema descriptor for user_id field.
+	s3objectaclDescUserID := s3objectaclFields[3].Descriptor()
+	// s3objectacl.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3objectacl.UserIDValidator = s3objectaclDescUserID.Validators[0].(func(string) error)
+	// s3objectaclDescCreatedAt is the schema descriptor for created_at field.
+	s3objectaclDescCreatedAt := s3objectaclFields[5].Descriptor()
+	// s3objectacl.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3objectacl.DefaultCreatedAt = s3objectaclDescCreatedAt.Default.(func() time.Time)
+	// s3objectaclDescUpdatedAt is the schema descriptor for updated_at field.
+	s3objectaclDescUpdatedAt := s3objectaclFields[6].Descriptor()
+	// s3objectacl.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3objectacl.DefaultUpdatedAt = s3objectaclDescUpdatedAt.Default.(func() time.Time)
+	// s3objectacl.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3objectacl.UpdateDefaultUpdatedAt = s3objectaclDescUpdatedAt.UpdateDefault.(func() time.Time)
+	s3objectencryptionFields := schema.S3ObjectEncryption{}.Fields()
+	_ = s3objectencryptionFields
+	// s3objectencryptionDescBucketName is the schema descriptor for bucket_name field.
+	s3objectencryptionDescBucketName := s3objectencryptionFields[0].Descriptor()
+	// s3objectencryption.BucketNameValidator is a validator for the "bucket_name" field. It is called by the builders before save.
+	s3objectencryption.BucketNameValidator = s3objectencryptionDescBucketName.Validators[0].(func(string) error)
+	// s3objectencryptionDescObjectKey is the schema descriptor for object_key field.
+	s3objectencryptionDescObjectKey := s3objectencryptionFields[1].Descriptor()
+	// s3objectencryption.ObjectKeyValidator is a validator for the "object_key" field. It is called by the builders before save.
+	s3objectencryption.ObjectKeyValidator = s3objectencryptionDescObjectKey.Validators[0].(func(string) error)
+	// s3objectencryptionDescVersionID is the schema descriptor for version_id field.
+	s3objectencryptionDescVersionID := s3objectencryptionFields[2].Descriptor()
+	// s3objectencryption.DefaultVersionID holds the default value on creation for the version_id field.
+	s3objectencryption.DefaultVersionID = s3objectencryptionDescVersionID.Default.(string)
+	// s3objectencryption.VersionIDValidator is a validator for the "version_id" field. It is called by the builders before save.
+	s3objectencryption.VersionIDValidator = s3objectencryptionDescVersionID.Validators[0].(func(string) error)
+	// s3objectencryptionDescUserID is the schema descriptor for user_id field.
+	s3objectencryptionDescUserID := s3objectencryptionFields[3].Descriptor()
+	// s3objectencryption.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	s3objectencryption.UserIDValidator = s3objectencryptionDescUserID.Validators[0].(func(string) error)
+	// s3objectencryptionDescEncryptionType is the schema descriptor for encryption_type field.
+	s3objectencryptionDescEncryptionType := s3objectencryptionFields[4].Descriptor()
+	// s3objectencryption.EncryptionTypeValidator is a validator for the "encryption_type" field. It is called by the builders before save.
+	s3objectencryption.EncryptionTypeValidator = s3objectencryptionDescEncryptionType.Validators[0].(func(string) error)
+	// s3objectencryptionDescAlgorithm is the schema descriptor for algorithm field.
+	s3objectencryptionDescAlgorithm := s3objectencryptionFields[5].Descriptor()
+	// s3objectencryption.DefaultAlgorithm holds the default value on creation for the algorithm field.
+	s3objectencryption.DefaultAlgorithm = s3objectencryptionDescAlgorithm.Default.(string)
+	// s3objectencryption.AlgorithmValidator is a validator for the "algorithm" field. It is called by the builders before save.
+	s3objectencryption.AlgorithmValidator = s3objectencryptionDescAlgorithm.Validators[0].(func(string) error)
+	// s3objectencryptionDescKeyID is the schema descriptor for key_id field.
+	s3objectencryptionDescKeyID := s3objectencryptionFields[6].Descriptor()
+	// s3objectencryption.DefaultKeyID holds the default value on creation for the key_id field.
+	s3objectencryption.DefaultKeyID = s3objectencryptionDescKeyID.Default.(string)
+	// s3objectencryption.KeyIDValidator is a validator for the "key_id" field. It is called by the builders before save.
+	s3objectencryption.KeyIDValidator = s3objectencryptionDescKeyID.Validators[0].(func(string) error)
+	// s3objectencryptionDescEncryptedKey is the schema descriptor for encrypted_key field.
+	s3objectencryptionDescEncryptedKey := s3objectencryptionFields[7].Descriptor()
+	// s3objectencryption.DefaultEncryptedKey holds the default value on creation for the encrypted_key field.
+	s3objectencryption.DefaultEncryptedKey = s3objectencryptionDescEncryptedKey.Default.(string)
+	// s3objectencryptionDescIv is the schema descriptor for iv field.
+	s3objectencryptionDescIv := s3objectencryptionFields[8].Descriptor()
+	// s3objectencryption.DefaultIv holds the default value on creation for the iv field.
+	s3objectencryption.DefaultIv = s3objectencryptionDescIv.Default.(string)
+	// s3objectencryption.IvValidator is a validator for the "iv" field. It is called by the builders before save.
+	s3objectencryption.IvValidator = s3objectencryptionDescIv.Validators[0].(func(string) error)
+	// s3objectencryptionDescCreatedAt is the schema descriptor for created_at field.
+	s3objectencryptionDescCreatedAt := s3objectencryptionFields[9].Descriptor()
+	// s3objectencryption.DefaultCreatedAt holds the default value on creation for the created_at field.
+	s3objectencryption.DefaultCreatedAt = s3objectencryptionDescCreatedAt.Default.(func() time.Time)
+	// s3objectencryptionDescUpdatedAt is the schema descriptor for updated_at field.
+	s3objectencryptionDescUpdatedAt := s3objectencryptionFields[10].Descriptor()
+	// s3objectencryption.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	s3objectencryption.DefaultUpdatedAt = s3objectencryptionDescUpdatedAt.Default.(func() time.Time)
+	// s3objectencryption.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	s3objectencryption.UpdateDefaultUpdatedAt = s3objectencryptionDescUpdatedAt.UpdateDefault.(func() time.Time)
 	shareFields := schema.Share{}.Fields()
 	_ = shareFields
 	// shareDescPasswordHash is the schema descriptor for password_hash field.

@@ -40,6 +40,26 @@ var (
 			},
 		},
 	}
+	// DiskColumns holds the columns for the "disk" table.
+	DiskColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "size", Type: field.TypeInt64},
+		{Name: "disk_path", Type: field.TypeString},
+		{Name: "data_path", Type: field.TypeString},
+	}
+	// DiskTable holds the schema information for the "disk" table.
+	DiskTable = &schema.Table{
+		Name:       "disk",
+		Columns:    DiskColumns,
+		PrimaryKey: []*schema.Column{DiskColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "disk_disk_path",
+				Unique:  false,
+				Columns: []*schema.Column{DiskColumns[2]},
+			},
+		},
+	}
 	// DownloadTaskColumns holds the columns for the "download_task" table.
 	DownloadTaskColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -308,6 +328,304 @@ var (
 			},
 		},
 	}
+	// S3BucketsColumns holds the columns for the "s3_buckets" table.
+	S3BucketsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "region", Type: field.TypeString, Size: 32, Default: "us-east-1"},
+		{Name: "virtual_path_id", Type: field.TypeInt},
+		{Name: "versioning", Type: field.TypeString, Size: 16, Default: "Disabled"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3BucketsTable holds the schema information for the "s3_buckets" table.
+	S3BucketsTable = &schema.Table{
+		Name:       "s3_buckets",
+		Columns:    S3BucketsColumns,
+		PrimaryKey: []*schema.Column{S3BucketsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3bucket_bucket_name_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{S3BucketsColumns[1], S3BucketsColumns[2]},
+			},
+			{
+				Name:    "s3bucket_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3BucketsColumns[2]},
+			},
+		},
+	}
+	// S3BucketACLColumns holds the columns for the "s3_bucket_acl" table.
+	S3BucketACLColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "acl_config", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3BucketACLTable holds the schema information for the "s3_bucket_acl" table.
+	S3BucketACLTable = &schema.Table{
+		Name:       "s3_bucket_acl",
+		Columns:    S3BucketACLColumns,
+		PrimaryKey: []*schema.Column{S3BucketACLColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3bucketacl_bucket_name_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{S3BucketACLColumns[1], S3BucketACLColumns[2]},
+			},
+		},
+	}
+	// S3BucketCorsColumns holds the columns for the "s3_bucket_cors" table.
+	S3BucketCorsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "cors_config", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3BucketCorsTable holds the schema information for the "s3_bucket_cors" table.
+	S3BucketCorsTable = &schema.Table{
+		Name:       "s3_bucket_cors",
+		Columns:    S3BucketCorsColumns,
+		PrimaryKey: []*schema.Column{S3BucketCorsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3bucketcors_bucket_name_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{S3BucketCorsColumns[1], S3BucketCorsColumns[2]},
+			},
+		},
+	}
+	// S3BucketLifecycleColumns holds the columns for the "s3_bucket_lifecycle" table.
+	S3BucketLifecycleColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "lifecycle_json", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3BucketLifecycleTable holds the schema information for the "s3_bucket_lifecycle" table.
+	S3BucketLifecycleTable = &schema.Table{
+		Name:       "s3_bucket_lifecycle",
+		Columns:    S3BucketLifecycleColumns,
+		PrimaryKey: []*schema.Column{S3BucketLifecycleColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3bucketlifecycle_bucket_name_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{S3BucketLifecycleColumns[1], S3BucketLifecycleColumns[2]},
+			},
+		},
+	}
+	// S3BucketPolicyColumns holds the columns for the "s3_bucket_policy" table.
+	S3BucketPolicyColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "policy_json", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3BucketPolicyTable holds the schema information for the "s3_bucket_policy" table.
+	S3BucketPolicyTable = &schema.Table{
+		Name:       "s3_bucket_policy",
+		Columns:    S3BucketPolicyColumns,
+		PrimaryKey: []*schema.Column{S3BucketPolicyColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3bucketpolicy_bucket_name_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{S3BucketPolicyColumns[1], S3BucketPolicyColumns[2]},
+			},
+		},
+	}
+	// S3EncryptionKeysColumns holds the columns for the "s3_encryption_keys" table.
+	S3EncryptionKeysColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "key_id", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "key_data", Type: field.TypeString},
+		{Name: "algorithm", Type: field.TypeString, Size: 32, Default: "AES256"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3EncryptionKeysTable holds the schema information for the "s3_encryption_keys" table.
+	S3EncryptionKeysTable = &schema.Table{
+		Name:       "s3_encryption_keys",
+		Columns:    S3EncryptionKeysColumns,
+		PrimaryKey: []*schema.Column{S3EncryptionKeysColumns[0]},
+	}
+	// S3MultipartPartsColumns holds the columns for the "s3_multipart_parts" table.
+	S3MultipartPartsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "upload_id", Type: field.TypeString, Size: 64},
+		{Name: "part_number", Type: field.TypeInt},
+		{Name: "etag", Type: field.TypeString, Size: 64},
+		{Name: "size", Type: field.TypeInt64},
+		{Name: "chunk_path", Type: field.TypeString, Nullable: true, Size: 512, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// S3MultipartPartsTable holds the schema information for the "s3_multipart_parts" table.
+	S3MultipartPartsTable = &schema.Table{
+		Name:       "s3_multipart_parts",
+		Columns:    S3MultipartPartsColumns,
+		PrimaryKey: []*schema.Column{S3MultipartPartsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3multipartpart_upload_id_part_number",
+				Unique:  true,
+				Columns: []*schema.Column{S3MultipartPartsColumns[1], S3MultipartPartsColumns[2]},
+			},
+		},
+	}
+	// S3MultipartUploadsColumns holds the columns for the "s3_multipart_uploads" table.
+	S3MultipartUploadsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "upload_id", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "object_key", Type: field.TypeString, Size: 1024},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "metadata", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "status", Type: field.TypeString, Size: 32, Default: "in-progress"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3MultipartUploadsTable holds the schema information for the "s3_multipart_uploads" table.
+	S3MultipartUploadsTable = &schema.Table{
+		Name:       "s3_multipart_uploads",
+		Columns:    S3MultipartUploadsColumns,
+		PrimaryKey: []*schema.Column{S3MultipartUploadsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3multipartupload_bucket_name",
+				Unique:  false,
+				Columns: []*schema.Column{S3MultipartUploadsColumns[2]},
+			},
+			{
+				Name:    "s3multipartupload_object_key",
+				Unique:  false,
+				Columns: []*schema.Column{S3MultipartUploadsColumns[3]},
+			},
+			{
+				Name:    "s3multipartupload_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3MultipartUploadsColumns[4]},
+			},
+		},
+	}
+	// S3ObjectMetadataColumns holds the columns for the "s3_object_metadata" table.
+	S3ObjectMetadataColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "file_id", Type: field.TypeString, Nullable: true, Size: 36, Default: ""},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "object_key", Type: field.TypeString, Size: 1024},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "etag", Type: field.TypeString, Nullable: true, Size: 64, Default: ""},
+		{Name: "storage_class", Type: field.TypeString, Size: 32, Default: "STANDARD"},
+		{Name: "content_type", Type: field.TypeString, Nullable: true, Size: 256, Default: ""},
+		{Name: "user_metadata", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "tags", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "version_id", Type: field.TypeString, Nullable: true, Size: 36, Default: ""},
+		{Name: "is_latest", Type: field.TypeBool, Default: true},
+		{Name: "is_delete_marker", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3ObjectMetadataTable holds the schema information for the "s3_object_metadata" table.
+	S3ObjectMetadataTable = &schema.Table{
+		Name:       "s3_object_metadata",
+		Columns:    S3ObjectMetadataColumns,
+		PrimaryKey: []*schema.Column{S3ObjectMetadataColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3object_bucket_name_object_key",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectMetadataColumns[2], S3ObjectMetadataColumns[3]},
+			},
+			{
+				Name:    "s3object_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectMetadataColumns[4]},
+			},
+			{
+				Name:    "s3object_version_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectMetadataColumns[10]},
+			},
+			{
+				Name:    "s3object_is_latest",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectMetadataColumns[11]},
+			},
+			{
+				Name:    "s3object_is_delete_marker",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectMetadataColumns[12]},
+			},
+		},
+	}
+	// S3ObjectACLColumns holds the columns for the "s3_object_acl" table.
+	S3ObjectACLColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "object_key", Type: field.TypeString, Size: 1024},
+		{Name: "version_id", Type: field.TypeString, Nullable: true, Size: 36, Default: ""},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "acl_config", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3ObjectACLTable holds the schema information for the "s3_object_acl" table.
+	S3ObjectACLTable = &schema.Table{
+		Name:       "s3_object_acl",
+		Columns:    S3ObjectACLColumns,
+		PrimaryKey: []*schema.Column{S3ObjectACLColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3objectacl_bucket_name_object_key_version_id_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectACLColumns[1], S3ObjectACLColumns[2], S3ObjectACLColumns[3], S3ObjectACLColumns[4]},
+			},
+		},
+	}
+	// S3ObjectEncryptionColumns holds the columns for the "s3_object_encryption" table.
+	S3ObjectEncryptionColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "bucket_name", Type: field.TypeString, Size: 63},
+		{Name: "object_key", Type: field.TypeString, Size: 1024},
+		{Name: "version_id", Type: field.TypeString, Nullable: true, Size: 36, Default: ""},
+		{Name: "user_id", Type: field.TypeString, Size: 36},
+		{Name: "encryption_type", Type: field.TypeString, Size: 32},
+		{Name: "algorithm", Type: field.TypeString, Size: 32, Default: "AES256"},
+		{Name: "key_id", Type: field.TypeString, Nullable: true, Size: 64, Default: ""},
+		{Name: "encrypted_key", Type: field.TypeString, Nullable: true, Default: ""},
+		{Name: "iv", Type: field.TypeString, Nullable: true, Size: 64, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// S3ObjectEncryptionTable holds the schema information for the "s3_object_encryption" table.
+	S3ObjectEncryptionTable = &schema.Table{
+		Name:       "s3_object_encryption",
+		Columns:    S3ObjectEncryptionColumns,
+		PrimaryKey: []*schema.Column{S3ObjectEncryptionColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "s3objectencryption_bucket_name_object_key_version_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectEncryptionColumns[1], S3ObjectEncryptionColumns[2], S3ObjectEncryptionColumns[3]},
+			},
+			{
+				Name:    "s3objectencryption_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{S3ObjectEncryptionColumns[4]},
+			},
+		},
+	}
 	// SharesColumns holds the columns for the "shares" table.
 	SharesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -334,6 +652,25 @@ var (
 				Name:    "share_token",
 				Unique:  false,
 				Columns: []*schema.Column{SharesColumns[3]},
+			},
+		},
+	}
+	// SysConfigColumns holds the columns for the "sys_config" table.
+	SysConfigColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "value", Type: field.TypeString},
+	}
+	// SysConfigTable holds the schema information for the "sys_config" table.
+	SysConfigTable = &schema.Table{
+		Name:       "sys_config",
+		Columns:    SysConfigColumns,
+		PrimaryKey: []*schema.Column{SysConfigColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sysconfig_key",
+				Unique:  false,
+				Columns: []*schema.Column{SysConfigColumns[1]},
 			},
 		},
 	}
@@ -563,6 +900,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeyTable,
+		DiskTable,
 		DownloadTaskTable,
 		DrivesTable,
 		EntriesTable,
@@ -572,7 +910,19 @@ var (
 		GroupPowerTable,
 		PowerTable,
 		RecycledTable,
+		S3BucketsTable,
+		S3BucketACLTable,
+		S3BucketCorsTable,
+		S3BucketLifecycleTable,
+		S3BucketPolicyTable,
+		S3EncryptionKeysTable,
+		S3MultipartPartsTable,
+		S3MultipartUploadsTable,
+		S3ObjectMetadataTable,
+		S3ObjectACLTable,
+		S3ObjectEncryptionTable,
 		SharesTable,
+		SysConfigTable,
 		UploadChunkTable,
 		UploadPartsTable,
 		UploadSessionsTable,
@@ -587,6 +937,9 @@ func init() {
 	APIKeyTable.ForeignKeys[0].RefTable = UsersTable
 	APIKeyTable.Annotation = &entsql.Annotation{
 		Table: "api_key",
+	}
+	DiskTable.Annotation = &entsql.Annotation{
+		Table: "disk",
 	}
 	DownloadTaskTable.Annotation = &entsql.Annotation{
 		Table: "download_task",
@@ -612,8 +965,44 @@ func init() {
 	RecycledTable.Annotation = &entsql.Annotation{
 		Table: "recycled",
 	}
+	S3BucketsTable.Annotation = &entsql.Annotation{
+		Table: "s3_buckets",
+	}
+	S3BucketACLTable.Annotation = &entsql.Annotation{
+		Table: "s3_bucket_acl",
+	}
+	S3BucketCorsTable.Annotation = &entsql.Annotation{
+		Table: "s3_bucket_cors",
+	}
+	S3BucketLifecycleTable.Annotation = &entsql.Annotation{
+		Table: "s3_bucket_lifecycle",
+	}
+	S3BucketPolicyTable.Annotation = &entsql.Annotation{
+		Table: "s3_bucket_policy",
+	}
+	S3EncryptionKeysTable.Annotation = &entsql.Annotation{
+		Table: "s3_encryption_keys",
+	}
+	S3MultipartPartsTable.Annotation = &entsql.Annotation{
+		Table: "s3_multipart_parts",
+	}
+	S3MultipartUploadsTable.Annotation = &entsql.Annotation{
+		Table: "s3_multipart_uploads",
+	}
+	S3ObjectMetadataTable.Annotation = &entsql.Annotation{
+		Table: "s3_object_metadata",
+	}
+	S3ObjectACLTable.Annotation = &entsql.Annotation{
+		Table: "s3_object_acl",
+	}
+	S3ObjectEncryptionTable.Annotation = &entsql.Annotation{
+		Table: "s3_object_encryption",
+	}
 	SharesTable.Annotation = &entsql.Annotation{
 		Table: "shares",
+	}
+	SysConfigTable.Annotation = &entsql.Annotation{
+		Table: "sys_config",
 	}
 	UploadChunkTable.Annotation = &entsql.Annotation{
 		Table: "upload_chunk",

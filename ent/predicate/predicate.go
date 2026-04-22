@@ -9,6 +9,9 @@ import (
 // APIKey is the predicate function for apikey builders.
 type APIKey func(*sql.Selector)
 
+// Disk is the predicate function for disk builders.
+type Disk func(*sql.Selector)
+
 // DownloadTask is the predicate function for downloadtask builders.
 type DownloadTask func(*sql.Selector)
 
@@ -36,8 +39,44 @@ type Power func(*sql.Selector)
 // Recycled is the predicate function for recycled builders.
 type Recycled func(*sql.Selector)
 
+// S3Bucket is the predicate function for s3bucket builders.
+type S3Bucket func(*sql.Selector)
+
+// S3BucketACL is the predicate function for s3bucketacl builders.
+type S3BucketACL func(*sql.Selector)
+
+// S3BucketCORS is the predicate function for s3bucketcors builders.
+type S3BucketCORS func(*sql.Selector)
+
+// S3BucketLifecycle is the predicate function for s3bucketlifecycle builders.
+type S3BucketLifecycle func(*sql.Selector)
+
+// S3BucketPolicy is the predicate function for s3bucketpolicy builders.
+type S3BucketPolicy func(*sql.Selector)
+
+// S3EncryptionKey is the predicate function for s3encryptionkey builders.
+type S3EncryptionKey func(*sql.Selector)
+
+// S3MultipartPart is the predicate function for s3multipartpart builders.
+type S3MultipartPart func(*sql.Selector)
+
+// S3MultipartUpload is the predicate function for s3multipartupload builders.
+type S3MultipartUpload func(*sql.Selector)
+
+// S3Object is the predicate function for s3object builders.
+type S3Object func(*sql.Selector)
+
+// S3ObjectACL is the predicate function for s3objectacl builders.
+type S3ObjectACL func(*sql.Selector)
+
+// S3ObjectEncryption is the predicate function for s3objectencryption builders.
+type S3ObjectEncryption func(*sql.Selector)
+
 // Share is the predicate function for share builders.
 type Share func(*sql.Selector)
+
+// SysConfig is the predicate function for sysconfig builders.
+type SysConfig func(*sql.Selector)
 
 // UploadChunk is the predicate function for uploadchunk builders.
 type UploadChunk func(*sql.Selector)

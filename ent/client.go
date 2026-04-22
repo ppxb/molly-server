@@ -12,6 +12,7 @@ import (
 	"molly-server/ent/migrate"
 
 	"molly-server/ent/apikey"
+	"molly-server/ent/disk"
 	"molly-server/ent/downloadtask"
 	"molly-server/ent/drive"
 	"molly-server/ent/entry"
@@ -21,7 +22,19 @@ import (
 	"molly-server/ent/grouppower"
 	"molly-server/ent/power"
 	"molly-server/ent/recycled"
+	"molly-server/ent/s3bucket"
+	"molly-server/ent/s3bucketacl"
+	"molly-server/ent/s3bucketcors"
+	"molly-server/ent/s3bucketlifecycle"
+	"molly-server/ent/s3bucketpolicy"
+	"molly-server/ent/s3encryptionkey"
+	"molly-server/ent/s3multipartpart"
+	"molly-server/ent/s3multipartupload"
+	"molly-server/ent/s3object"
+	"molly-server/ent/s3objectacl"
+	"molly-server/ent/s3objectencryption"
 	"molly-server/ent/share"
+	"molly-server/ent/sysconfig"
 	"molly-server/ent/uploadchunk"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
@@ -43,6 +56,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// APIKey is the client for interacting with the APIKey builders.
 	APIKey *APIKeyClient
+	// Disk is the client for interacting with the Disk builders.
+	Disk *DiskClient
 	// DownloadTask is the client for interacting with the DownloadTask builders.
 	DownloadTask *DownloadTaskClient
 	// Drive is the client for interacting with the Drive builders.
@@ -61,8 +76,32 @@ type Client struct {
 	Power *PowerClient
 	// Recycled is the client for interacting with the Recycled builders.
 	Recycled *RecycledClient
+	// S3Bucket is the client for interacting with the S3Bucket builders.
+	S3Bucket *S3BucketClient
+	// S3BucketACL is the client for interacting with the S3BucketACL builders.
+	S3BucketACL *S3BucketACLClient
+	// S3BucketCORS is the client for interacting with the S3BucketCORS builders.
+	S3BucketCORS *S3BucketCORSClient
+	// S3BucketLifecycle is the client for interacting with the S3BucketLifecycle builders.
+	S3BucketLifecycle *S3BucketLifecycleClient
+	// S3BucketPolicy is the client for interacting with the S3BucketPolicy builders.
+	S3BucketPolicy *S3BucketPolicyClient
+	// S3EncryptionKey is the client for interacting with the S3EncryptionKey builders.
+	S3EncryptionKey *S3EncryptionKeyClient
+	// S3MultipartPart is the client for interacting with the S3MultipartPart builders.
+	S3MultipartPart *S3MultipartPartClient
+	// S3MultipartUpload is the client for interacting with the S3MultipartUpload builders.
+	S3MultipartUpload *S3MultipartUploadClient
+	// S3Object is the client for interacting with the S3Object builders.
+	S3Object *S3ObjectClient
+	// S3ObjectACL is the client for interacting with the S3ObjectACL builders.
+	S3ObjectACL *S3ObjectACLClient
+	// S3ObjectEncryption is the client for interacting with the S3ObjectEncryption builders.
+	S3ObjectEncryption *S3ObjectEncryptionClient
 	// Share is the client for interacting with the Share builders.
 	Share *ShareClient
+	// SysConfig is the client for interacting with the SysConfig builders.
+	SysConfig *SysConfigClient
 	// UploadChunk is the client for interacting with the UploadChunk builders.
 	UploadChunk *UploadChunkClient
 	// UploadPart is the client for interacting with the UploadPart builders.
@@ -89,6 +128,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.APIKey = NewAPIKeyClient(c.config)
+	c.Disk = NewDiskClient(c.config)
 	c.DownloadTask = NewDownloadTaskClient(c.config)
 	c.Drive = NewDriveClient(c.config)
 	c.Entry = NewEntryClient(c.config)
@@ -98,7 +138,19 @@ func (c *Client) init() {
 	c.GroupPower = NewGroupPowerClient(c.config)
 	c.Power = NewPowerClient(c.config)
 	c.Recycled = NewRecycledClient(c.config)
+	c.S3Bucket = NewS3BucketClient(c.config)
+	c.S3BucketACL = NewS3BucketACLClient(c.config)
+	c.S3BucketCORS = NewS3BucketCORSClient(c.config)
+	c.S3BucketLifecycle = NewS3BucketLifecycleClient(c.config)
+	c.S3BucketPolicy = NewS3BucketPolicyClient(c.config)
+	c.S3EncryptionKey = NewS3EncryptionKeyClient(c.config)
+	c.S3MultipartPart = NewS3MultipartPartClient(c.config)
+	c.S3MultipartUpload = NewS3MultipartUploadClient(c.config)
+	c.S3Object = NewS3ObjectClient(c.config)
+	c.S3ObjectACL = NewS3ObjectACLClient(c.config)
+	c.S3ObjectEncryption = NewS3ObjectEncryptionClient(c.config)
 	c.Share = NewShareClient(c.config)
+	c.SysConfig = NewSysConfigClient(c.config)
 	c.UploadChunk = NewUploadChunkClient(c.config)
 	c.UploadPart = NewUploadPartClient(c.config)
 	c.UploadSession = NewUploadSessionClient(c.config)
@@ -196,26 +248,39 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:           ctx,
-		config:        cfg,
-		APIKey:        NewAPIKeyClient(cfg),
-		DownloadTask:  NewDownloadTaskClient(cfg),
-		Drive:         NewDriveClient(cfg),
-		Entry:         NewEntryClient(cfg),
-		FileChunk:     NewFileChunkClient(cfg),
-		FileInfo:      NewFileInfoClient(cfg),
-		Group:         NewGroupClient(cfg),
-		GroupPower:    NewGroupPowerClient(cfg),
-		Power:         NewPowerClient(cfg),
-		Recycled:      NewRecycledClient(cfg),
-		Share:         NewShareClient(cfg),
-		UploadChunk:   NewUploadChunkClient(cfg),
-		UploadPart:    NewUploadPartClient(cfg),
-		UploadSession: NewUploadSessionClient(cfg),
-		UploadTask:    NewUploadTaskClient(cfg),
-		User:          NewUserClient(cfg),
-		UserFile:      NewUserFileClient(cfg),
-		VirtualPath:   NewVirtualPathClient(cfg),
+		ctx:                ctx,
+		config:             cfg,
+		APIKey:             NewAPIKeyClient(cfg),
+		Disk:               NewDiskClient(cfg),
+		DownloadTask:       NewDownloadTaskClient(cfg),
+		Drive:              NewDriveClient(cfg),
+		Entry:              NewEntryClient(cfg),
+		FileChunk:          NewFileChunkClient(cfg),
+		FileInfo:           NewFileInfoClient(cfg),
+		Group:              NewGroupClient(cfg),
+		GroupPower:         NewGroupPowerClient(cfg),
+		Power:              NewPowerClient(cfg),
+		Recycled:           NewRecycledClient(cfg),
+		S3Bucket:           NewS3BucketClient(cfg),
+		S3BucketACL:        NewS3BucketACLClient(cfg),
+		S3BucketCORS:       NewS3BucketCORSClient(cfg),
+		S3BucketLifecycle:  NewS3BucketLifecycleClient(cfg),
+		S3BucketPolicy:     NewS3BucketPolicyClient(cfg),
+		S3EncryptionKey:    NewS3EncryptionKeyClient(cfg),
+		S3MultipartPart:    NewS3MultipartPartClient(cfg),
+		S3MultipartUpload:  NewS3MultipartUploadClient(cfg),
+		S3Object:           NewS3ObjectClient(cfg),
+		S3ObjectACL:        NewS3ObjectACLClient(cfg),
+		S3ObjectEncryption: NewS3ObjectEncryptionClient(cfg),
+		Share:              NewShareClient(cfg),
+		SysConfig:          NewSysConfigClient(cfg),
+		UploadChunk:        NewUploadChunkClient(cfg),
+		UploadPart:         NewUploadPartClient(cfg),
+		UploadSession:      NewUploadSessionClient(cfg),
+		UploadTask:         NewUploadTaskClient(cfg),
+		User:               NewUserClient(cfg),
+		UserFile:           NewUserFileClient(cfg),
+		VirtualPath:        NewVirtualPathClient(cfg),
 	}, nil
 }
 
@@ -233,26 +298,39 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:           ctx,
-		config:        cfg,
-		APIKey:        NewAPIKeyClient(cfg),
-		DownloadTask:  NewDownloadTaskClient(cfg),
-		Drive:         NewDriveClient(cfg),
-		Entry:         NewEntryClient(cfg),
-		FileChunk:     NewFileChunkClient(cfg),
-		FileInfo:      NewFileInfoClient(cfg),
-		Group:         NewGroupClient(cfg),
-		GroupPower:    NewGroupPowerClient(cfg),
-		Power:         NewPowerClient(cfg),
-		Recycled:      NewRecycledClient(cfg),
-		Share:         NewShareClient(cfg),
-		UploadChunk:   NewUploadChunkClient(cfg),
-		UploadPart:    NewUploadPartClient(cfg),
-		UploadSession: NewUploadSessionClient(cfg),
-		UploadTask:    NewUploadTaskClient(cfg),
-		User:          NewUserClient(cfg),
-		UserFile:      NewUserFileClient(cfg),
-		VirtualPath:   NewVirtualPathClient(cfg),
+		ctx:                ctx,
+		config:             cfg,
+		APIKey:             NewAPIKeyClient(cfg),
+		Disk:               NewDiskClient(cfg),
+		DownloadTask:       NewDownloadTaskClient(cfg),
+		Drive:              NewDriveClient(cfg),
+		Entry:              NewEntryClient(cfg),
+		FileChunk:          NewFileChunkClient(cfg),
+		FileInfo:           NewFileInfoClient(cfg),
+		Group:              NewGroupClient(cfg),
+		GroupPower:         NewGroupPowerClient(cfg),
+		Power:              NewPowerClient(cfg),
+		Recycled:           NewRecycledClient(cfg),
+		S3Bucket:           NewS3BucketClient(cfg),
+		S3BucketACL:        NewS3BucketACLClient(cfg),
+		S3BucketCORS:       NewS3BucketCORSClient(cfg),
+		S3BucketLifecycle:  NewS3BucketLifecycleClient(cfg),
+		S3BucketPolicy:     NewS3BucketPolicyClient(cfg),
+		S3EncryptionKey:    NewS3EncryptionKeyClient(cfg),
+		S3MultipartPart:    NewS3MultipartPartClient(cfg),
+		S3MultipartUpload:  NewS3MultipartUploadClient(cfg),
+		S3Object:           NewS3ObjectClient(cfg),
+		S3ObjectACL:        NewS3ObjectACLClient(cfg),
+		S3ObjectEncryption: NewS3ObjectEncryptionClient(cfg),
+		Share:              NewShareClient(cfg),
+		SysConfig:          NewSysConfigClient(cfg),
+		UploadChunk:        NewUploadChunkClient(cfg),
+		UploadPart:         NewUploadPartClient(cfg),
+		UploadSession:      NewUploadSessionClient(cfg),
+		UploadTask:         NewUploadTaskClient(cfg),
+		User:               NewUserClient(cfg),
+		UserFile:           NewUserFileClient(cfg),
+		VirtualPath:        NewVirtualPathClient(cfg),
 	}, nil
 }
 
@@ -282,8 +360,11 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.DownloadTask, c.Drive, c.Entry, c.FileChunk, c.FileInfo, c.Group,
-		c.GroupPower, c.Power, c.Recycled, c.Share, c.UploadChunk, c.UploadPart,
+		c.APIKey, c.Disk, c.DownloadTask, c.Drive, c.Entry, c.FileChunk, c.FileInfo,
+		c.Group, c.GroupPower, c.Power, c.Recycled, c.S3Bucket, c.S3BucketACL,
+		c.S3BucketCORS, c.S3BucketLifecycle, c.S3BucketPolicy, c.S3EncryptionKey,
+		c.S3MultipartPart, c.S3MultipartUpload, c.S3Object, c.S3ObjectACL,
+		c.S3ObjectEncryption, c.Share, c.SysConfig, c.UploadChunk, c.UploadPart,
 		c.UploadSession, c.UploadTask, c.User, c.UserFile, c.VirtualPath,
 	} {
 		n.Use(hooks...)
@@ -294,8 +375,11 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.DownloadTask, c.Drive, c.Entry, c.FileChunk, c.FileInfo, c.Group,
-		c.GroupPower, c.Power, c.Recycled, c.Share, c.UploadChunk, c.UploadPart,
+		c.APIKey, c.Disk, c.DownloadTask, c.Drive, c.Entry, c.FileChunk, c.FileInfo,
+		c.Group, c.GroupPower, c.Power, c.Recycled, c.S3Bucket, c.S3BucketACL,
+		c.S3BucketCORS, c.S3BucketLifecycle, c.S3BucketPolicy, c.S3EncryptionKey,
+		c.S3MultipartPart, c.S3MultipartUpload, c.S3Object, c.S3ObjectACL,
+		c.S3ObjectEncryption, c.Share, c.SysConfig, c.UploadChunk, c.UploadPart,
 		c.UploadSession, c.UploadTask, c.User, c.UserFile, c.VirtualPath,
 	} {
 		n.Intercept(interceptors...)
@@ -307,6 +391,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *APIKeyMutation:
 		return c.APIKey.mutate(ctx, m)
+	case *DiskMutation:
+		return c.Disk.mutate(ctx, m)
 	case *DownloadTaskMutation:
 		return c.DownloadTask.mutate(ctx, m)
 	case *DriveMutation:
@@ -325,8 +411,32 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Power.mutate(ctx, m)
 	case *RecycledMutation:
 		return c.Recycled.mutate(ctx, m)
+	case *S3BucketMutation:
+		return c.S3Bucket.mutate(ctx, m)
+	case *S3BucketACLMutation:
+		return c.S3BucketACL.mutate(ctx, m)
+	case *S3BucketCORSMutation:
+		return c.S3BucketCORS.mutate(ctx, m)
+	case *S3BucketLifecycleMutation:
+		return c.S3BucketLifecycle.mutate(ctx, m)
+	case *S3BucketPolicyMutation:
+		return c.S3BucketPolicy.mutate(ctx, m)
+	case *S3EncryptionKeyMutation:
+		return c.S3EncryptionKey.mutate(ctx, m)
+	case *S3MultipartPartMutation:
+		return c.S3MultipartPart.mutate(ctx, m)
+	case *S3MultipartUploadMutation:
+		return c.S3MultipartUpload.mutate(ctx, m)
+	case *S3ObjectMutation:
+		return c.S3Object.mutate(ctx, m)
+	case *S3ObjectACLMutation:
+		return c.S3ObjectACL.mutate(ctx, m)
+	case *S3ObjectEncryptionMutation:
+		return c.S3ObjectEncryption.mutate(ctx, m)
 	case *ShareMutation:
 		return c.Share.mutate(ctx, m)
+	case *SysConfigMutation:
+		return c.SysConfig.mutate(ctx, m)
 	case *UploadChunkMutation:
 		return c.UploadChunk.mutate(ctx, m)
 	case *UploadPartMutation:
@@ -492,6 +602,139 @@ func (c *APIKeyClient) mutate(ctx context.Context, m *APIKeyMutation) (Value, er
 		return (&APIKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown APIKey mutation op: %q", m.Op())
+	}
+}
+
+// DiskClient is a client for the Disk schema.
+type DiskClient struct {
+	config
+}
+
+// NewDiskClient returns a client for the Disk from the given config.
+func NewDiskClient(c config) *DiskClient {
+	return &DiskClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `disk.Hooks(f(g(h())))`.
+func (c *DiskClient) Use(hooks ...Hook) {
+	c.hooks.Disk = append(c.hooks.Disk, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `disk.Intercept(f(g(h())))`.
+func (c *DiskClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Disk = append(c.inters.Disk, interceptors...)
+}
+
+// Create returns a builder for creating a Disk entity.
+func (c *DiskClient) Create() *DiskCreate {
+	mutation := newDiskMutation(c.config, OpCreate)
+	return &DiskCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Disk entities.
+func (c *DiskClient) CreateBulk(builders ...*DiskCreate) *DiskCreateBulk {
+	return &DiskCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *DiskClient) MapCreateBulk(slice any, setFunc func(*DiskCreate, int)) *DiskCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &DiskCreateBulk{err: fmt.Errorf("calling to DiskClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*DiskCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &DiskCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Disk.
+func (c *DiskClient) Update() *DiskUpdate {
+	mutation := newDiskMutation(c.config, OpUpdate)
+	return &DiskUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *DiskClient) UpdateOne(_m *Disk) *DiskUpdateOne {
+	mutation := newDiskMutation(c.config, OpUpdateOne, withDisk(_m))
+	return &DiskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *DiskClient) UpdateOneID(id string) *DiskUpdateOne {
+	mutation := newDiskMutation(c.config, OpUpdateOne, withDiskID(id))
+	return &DiskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Disk.
+func (c *DiskClient) Delete() *DiskDelete {
+	mutation := newDiskMutation(c.config, OpDelete)
+	return &DiskDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *DiskClient) DeleteOne(_m *Disk) *DiskDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *DiskClient) DeleteOneID(id string) *DiskDeleteOne {
+	builder := c.Delete().Where(disk.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &DiskDeleteOne{builder}
+}
+
+// Query returns a query builder for Disk.
+func (c *DiskClient) Query() *DiskQuery {
+	return &DiskQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeDisk},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Disk entity by its id.
+func (c *DiskClient) Get(ctx context.Context, id string) (*Disk, error) {
+	return c.Query().Where(disk.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *DiskClient) GetX(ctx context.Context, id string) *Disk {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *DiskClient) Hooks() []Hook {
+	return c.hooks.Disk
+}
+
+// Interceptors returns the client interceptors.
+func (c *DiskClient) Interceptors() []Interceptor {
+	return c.inters.Disk
+}
+
+func (c *DiskClient) mutate(ctx context.Context, m *DiskMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&DiskCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&DiskUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&DiskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&DiskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Disk mutation op: %q", m.Op())
 	}
 }
 
@@ -1836,6 +2079,1469 @@ func (c *RecycledClient) mutate(ctx context.Context, m *RecycledMutation) (Value
 	}
 }
 
+// S3BucketClient is a client for the S3Bucket schema.
+type S3BucketClient struct {
+	config
+}
+
+// NewS3BucketClient returns a client for the S3Bucket from the given config.
+func NewS3BucketClient(c config) *S3BucketClient {
+	return &S3BucketClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3bucket.Hooks(f(g(h())))`.
+func (c *S3BucketClient) Use(hooks ...Hook) {
+	c.hooks.S3Bucket = append(c.hooks.S3Bucket, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3bucket.Intercept(f(g(h())))`.
+func (c *S3BucketClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3Bucket = append(c.inters.S3Bucket, interceptors...)
+}
+
+// Create returns a builder for creating a S3Bucket entity.
+func (c *S3BucketClient) Create() *S3BucketCreate {
+	mutation := newS3BucketMutation(c.config, OpCreate)
+	return &S3BucketCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3Bucket entities.
+func (c *S3BucketClient) CreateBulk(builders ...*S3BucketCreate) *S3BucketCreateBulk {
+	return &S3BucketCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3BucketClient) MapCreateBulk(slice any, setFunc func(*S3BucketCreate, int)) *S3BucketCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3BucketCreateBulk{err: fmt.Errorf("calling to S3BucketClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3BucketCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3BucketCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3Bucket.
+func (c *S3BucketClient) Update() *S3BucketUpdate {
+	mutation := newS3BucketMutation(c.config, OpUpdate)
+	return &S3BucketUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3BucketClient) UpdateOne(_m *S3Bucket) *S3BucketUpdateOne {
+	mutation := newS3BucketMutation(c.config, OpUpdateOne, withS3Bucket(_m))
+	return &S3BucketUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3BucketClient) UpdateOneID(id int) *S3BucketUpdateOne {
+	mutation := newS3BucketMutation(c.config, OpUpdateOne, withS3BucketID(id))
+	return &S3BucketUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3Bucket.
+func (c *S3BucketClient) Delete() *S3BucketDelete {
+	mutation := newS3BucketMutation(c.config, OpDelete)
+	return &S3BucketDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3BucketClient) DeleteOne(_m *S3Bucket) *S3BucketDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3BucketClient) DeleteOneID(id int) *S3BucketDeleteOne {
+	builder := c.Delete().Where(s3bucket.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3BucketDeleteOne{builder}
+}
+
+// Query returns a query builder for S3Bucket.
+func (c *S3BucketClient) Query() *S3BucketQuery {
+	return &S3BucketQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3Bucket},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3Bucket entity by its id.
+func (c *S3BucketClient) Get(ctx context.Context, id int) (*S3Bucket, error) {
+	return c.Query().Where(s3bucket.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3BucketClient) GetX(ctx context.Context, id int) *S3Bucket {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3BucketClient) Hooks() []Hook {
+	return c.hooks.S3Bucket
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3BucketClient) Interceptors() []Interceptor {
+	return c.inters.S3Bucket
+}
+
+func (c *S3BucketClient) mutate(ctx context.Context, m *S3BucketMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3BucketCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3BucketUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3BucketUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3BucketDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3Bucket mutation op: %q", m.Op())
+	}
+}
+
+// S3BucketACLClient is a client for the S3BucketACL schema.
+type S3BucketACLClient struct {
+	config
+}
+
+// NewS3BucketACLClient returns a client for the S3BucketACL from the given config.
+func NewS3BucketACLClient(c config) *S3BucketACLClient {
+	return &S3BucketACLClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3bucketacl.Hooks(f(g(h())))`.
+func (c *S3BucketACLClient) Use(hooks ...Hook) {
+	c.hooks.S3BucketACL = append(c.hooks.S3BucketACL, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3bucketacl.Intercept(f(g(h())))`.
+func (c *S3BucketACLClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3BucketACL = append(c.inters.S3BucketACL, interceptors...)
+}
+
+// Create returns a builder for creating a S3BucketACL entity.
+func (c *S3BucketACLClient) Create() *S3BucketACLCreate {
+	mutation := newS3BucketACLMutation(c.config, OpCreate)
+	return &S3BucketACLCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3BucketACL entities.
+func (c *S3BucketACLClient) CreateBulk(builders ...*S3BucketACLCreate) *S3BucketACLCreateBulk {
+	return &S3BucketACLCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3BucketACLClient) MapCreateBulk(slice any, setFunc func(*S3BucketACLCreate, int)) *S3BucketACLCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3BucketACLCreateBulk{err: fmt.Errorf("calling to S3BucketACLClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3BucketACLCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3BucketACLCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3BucketACL.
+func (c *S3BucketACLClient) Update() *S3BucketACLUpdate {
+	mutation := newS3BucketACLMutation(c.config, OpUpdate)
+	return &S3BucketACLUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3BucketACLClient) UpdateOne(_m *S3BucketACL) *S3BucketACLUpdateOne {
+	mutation := newS3BucketACLMutation(c.config, OpUpdateOne, withS3BucketACL(_m))
+	return &S3BucketACLUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3BucketACLClient) UpdateOneID(id int) *S3BucketACLUpdateOne {
+	mutation := newS3BucketACLMutation(c.config, OpUpdateOne, withS3BucketACLID(id))
+	return &S3BucketACLUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3BucketACL.
+func (c *S3BucketACLClient) Delete() *S3BucketACLDelete {
+	mutation := newS3BucketACLMutation(c.config, OpDelete)
+	return &S3BucketACLDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3BucketACLClient) DeleteOne(_m *S3BucketACL) *S3BucketACLDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3BucketACLClient) DeleteOneID(id int) *S3BucketACLDeleteOne {
+	builder := c.Delete().Where(s3bucketacl.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3BucketACLDeleteOne{builder}
+}
+
+// Query returns a query builder for S3BucketACL.
+func (c *S3BucketACLClient) Query() *S3BucketACLQuery {
+	return &S3BucketACLQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3BucketACL},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3BucketACL entity by its id.
+func (c *S3BucketACLClient) Get(ctx context.Context, id int) (*S3BucketACL, error) {
+	return c.Query().Where(s3bucketacl.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3BucketACLClient) GetX(ctx context.Context, id int) *S3BucketACL {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3BucketACLClient) Hooks() []Hook {
+	return c.hooks.S3BucketACL
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3BucketACLClient) Interceptors() []Interceptor {
+	return c.inters.S3BucketACL
+}
+
+func (c *S3BucketACLClient) mutate(ctx context.Context, m *S3BucketACLMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3BucketACLCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3BucketACLUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3BucketACLUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3BucketACLDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3BucketACL mutation op: %q", m.Op())
+	}
+}
+
+// S3BucketCORSClient is a client for the S3BucketCORS schema.
+type S3BucketCORSClient struct {
+	config
+}
+
+// NewS3BucketCORSClient returns a client for the S3BucketCORS from the given config.
+func NewS3BucketCORSClient(c config) *S3BucketCORSClient {
+	return &S3BucketCORSClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3bucketcors.Hooks(f(g(h())))`.
+func (c *S3BucketCORSClient) Use(hooks ...Hook) {
+	c.hooks.S3BucketCORS = append(c.hooks.S3BucketCORS, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3bucketcors.Intercept(f(g(h())))`.
+func (c *S3BucketCORSClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3BucketCORS = append(c.inters.S3BucketCORS, interceptors...)
+}
+
+// Create returns a builder for creating a S3BucketCORS entity.
+func (c *S3BucketCORSClient) Create() *S3BucketCORSCreate {
+	mutation := newS3BucketCORSMutation(c.config, OpCreate)
+	return &S3BucketCORSCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3BucketCORS entities.
+func (c *S3BucketCORSClient) CreateBulk(builders ...*S3BucketCORSCreate) *S3BucketCORSCreateBulk {
+	return &S3BucketCORSCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3BucketCORSClient) MapCreateBulk(slice any, setFunc func(*S3BucketCORSCreate, int)) *S3BucketCORSCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3BucketCORSCreateBulk{err: fmt.Errorf("calling to S3BucketCORSClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3BucketCORSCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3BucketCORSCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3BucketCORS.
+func (c *S3BucketCORSClient) Update() *S3BucketCORSUpdate {
+	mutation := newS3BucketCORSMutation(c.config, OpUpdate)
+	return &S3BucketCORSUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3BucketCORSClient) UpdateOne(_m *S3BucketCORS) *S3BucketCORSUpdateOne {
+	mutation := newS3BucketCORSMutation(c.config, OpUpdateOne, withS3BucketCORS(_m))
+	return &S3BucketCORSUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3BucketCORSClient) UpdateOneID(id int) *S3BucketCORSUpdateOne {
+	mutation := newS3BucketCORSMutation(c.config, OpUpdateOne, withS3BucketCORSID(id))
+	return &S3BucketCORSUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3BucketCORS.
+func (c *S3BucketCORSClient) Delete() *S3BucketCORSDelete {
+	mutation := newS3BucketCORSMutation(c.config, OpDelete)
+	return &S3BucketCORSDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3BucketCORSClient) DeleteOne(_m *S3BucketCORS) *S3BucketCORSDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3BucketCORSClient) DeleteOneID(id int) *S3BucketCORSDeleteOne {
+	builder := c.Delete().Where(s3bucketcors.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3BucketCORSDeleteOne{builder}
+}
+
+// Query returns a query builder for S3BucketCORS.
+func (c *S3BucketCORSClient) Query() *S3BucketCORSQuery {
+	return &S3BucketCORSQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3BucketCORS},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3BucketCORS entity by its id.
+func (c *S3BucketCORSClient) Get(ctx context.Context, id int) (*S3BucketCORS, error) {
+	return c.Query().Where(s3bucketcors.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3BucketCORSClient) GetX(ctx context.Context, id int) *S3BucketCORS {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3BucketCORSClient) Hooks() []Hook {
+	return c.hooks.S3BucketCORS
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3BucketCORSClient) Interceptors() []Interceptor {
+	return c.inters.S3BucketCORS
+}
+
+func (c *S3BucketCORSClient) mutate(ctx context.Context, m *S3BucketCORSMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3BucketCORSCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3BucketCORSUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3BucketCORSUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3BucketCORSDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3BucketCORS mutation op: %q", m.Op())
+	}
+}
+
+// S3BucketLifecycleClient is a client for the S3BucketLifecycle schema.
+type S3BucketLifecycleClient struct {
+	config
+}
+
+// NewS3BucketLifecycleClient returns a client for the S3BucketLifecycle from the given config.
+func NewS3BucketLifecycleClient(c config) *S3BucketLifecycleClient {
+	return &S3BucketLifecycleClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3bucketlifecycle.Hooks(f(g(h())))`.
+func (c *S3BucketLifecycleClient) Use(hooks ...Hook) {
+	c.hooks.S3BucketLifecycle = append(c.hooks.S3BucketLifecycle, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3bucketlifecycle.Intercept(f(g(h())))`.
+func (c *S3BucketLifecycleClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3BucketLifecycle = append(c.inters.S3BucketLifecycle, interceptors...)
+}
+
+// Create returns a builder for creating a S3BucketLifecycle entity.
+func (c *S3BucketLifecycleClient) Create() *S3BucketLifecycleCreate {
+	mutation := newS3BucketLifecycleMutation(c.config, OpCreate)
+	return &S3BucketLifecycleCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3BucketLifecycle entities.
+func (c *S3BucketLifecycleClient) CreateBulk(builders ...*S3BucketLifecycleCreate) *S3BucketLifecycleCreateBulk {
+	return &S3BucketLifecycleCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3BucketLifecycleClient) MapCreateBulk(slice any, setFunc func(*S3BucketLifecycleCreate, int)) *S3BucketLifecycleCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3BucketLifecycleCreateBulk{err: fmt.Errorf("calling to S3BucketLifecycleClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3BucketLifecycleCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3BucketLifecycleCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3BucketLifecycle.
+func (c *S3BucketLifecycleClient) Update() *S3BucketLifecycleUpdate {
+	mutation := newS3BucketLifecycleMutation(c.config, OpUpdate)
+	return &S3BucketLifecycleUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3BucketLifecycleClient) UpdateOne(_m *S3BucketLifecycle) *S3BucketLifecycleUpdateOne {
+	mutation := newS3BucketLifecycleMutation(c.config, OpUpdateOne, withS3BucketLifecycle(_m))
+	return &S3BucketLifecycleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3BucketLifecycleClient) UpdateOneID(id int) *S3BucketLifecycleUpdateOne {
+	mutation := newS3BucketLifecycleMutation(c.config, OpUpdateOne, withS3BucketLifecycleID(id))
+	return &S3BucketLifecycleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3BucketLifecycle.
+func (c *S3BucketLifecycleClient) Delete() *S3BucketLifecycleDelete {
+	mutation := newS3BucketLifecycleMutation(c.config, OpDelete)
+	return &S3BucketLifecycleDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3BucketLifecycleClient) DeleteOne(_m *S3BucketLifecycle) *S3BucketLifecycleDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3BucketLifecycleClient) DeleteOneID(id int) *S3BucketLifecycleDeleteOne {
+	builder := c.Delete().Where(s3bucketlifecycle.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3BucketLifecycleDeleteOne{builder}
+}
+
+// Query returns a query builder for S3BucketLifecycle.
+func (c *S3BucketLifecycleClient) Query() *S3BucketLifecycleQuery {
+	return &S3BucketLifecycleQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3BucketLifecycle},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3BucketLifecycle entity by its id.
+func (c *S3BucketLifecycleClient) Get(ctx context.Context, id int) (*S3BucketLifecycle, error) {
+	return c.Query().Where(s3bucketlifecycle.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3BucketLifecycleClient) GetX(ctx context.Context, id int) *S3BucketLifecycle {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3BucketLifecycleClient) Hooks() []Hook {
+	return c.hooks.S3BucketLifecycle
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3BucketLifecycleClient) Interceptors() []Interceptor {
+	return c.inters.S3BucketLifecycle
+}
+
+func (c *S3BucketLifecycleClient) mutate(ctx context.Context, m *S3BucketLifecycleMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3BucketLifecycleCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3BucketLifecycleUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3BucketLifecycleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3BucketLifecycleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3BucketLifecycle mutation op: %q", m.Op())
+	}
+}
+
+// S3BucketPolicyClient is a client for the S3BucketPolicy schema.
+type S3BucketPolicyClient struct {
+	config
+}
+
+// NewS3BucketPolicyClient returns a client for the S3BucketPolicy from the given config.
+func NewS3BucketPolicyClient(c config) *S3BucketPolicyClient {
+	return &S3BucketPolicyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3bucketpolicy.Hooks(f(g(h())))`.
+func (c *S3BucketPolicyClient) Use(hooks ...Hook) {
+	c.hooks.S3BucketPolicy = append(c.hooks.S3BucketPolicy, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3bucketpolicy.Intercept(f(g(h())))`.
+func (c *S3BucketPolicyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3BucketPolicy = append(c.inters.S3BucketPolicy, interceptors...)
+}
+
+// Create returns a builder for creating a S3BucketPolicy entity.
+func (c *S3BucketPolicyClient) Create() *S3BucketPolicyCreate {
+	mutation := newS3BucketPolicyMutation(c.config, OpCreate)
+	return &S3BucketPolicyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3BucketPolicy entities.
+func (c *S3BucketPolicyClient) CreateBulk(builders ...*S3BucketPolicyCreate) *S3BucketPolicyCreateBulk {
+	return &S3BucketPolicyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3BucketPolicyClient) MapCreateBulk(slice any, setFunc func(*S3BucketPolicyCreate, int)) *S3BucketPolicyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3BucketPolicyCreateBulk{err: fmt.Errorf("calling to S3BucketPolicyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3BucketPolicyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3BucketPolicyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3BucketPolicy.
+func (c *S3BucketPolicyClient) Update() *S3BucketPolicyUpdate {
+	mutation := newS3BucketPolicyMutation(c.config, OpUpdate)
+	return &S3BucketPolicyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3BucketPolicyClient) UpdateOne(_m *S3BucketPolicy) *S3BucketPolicyUpdateOne {
+	mutation := newS3BucketPolicyMutation(c.config, OpUpdateOne, withS3BucketPolicy(_m))
+	return &S3BucketPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3BucketPolicyClient) UpdateOneID(id int) *S3BucketPolicyUpdateOne {
+	mutation := newS3BucketPolicyMutation(c.config, OpUpdateOne, withS3BucketPolicyID(id))
+	return &S3BucketPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3BucketPolicy.
+func (c *S3BucketPolicyClient) Delete() *S3BucketPolicyDelete {
+	mutation := newS3BucketPolicyMutation(c.config, OpDelete)
+	return &S3BucketPolicyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3BucketPolicyClient) DeleteOne(_m *S3BucketPolicy) *S3BucketPolicyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3BucketPolicyClient) DeleteOneID(id int) *S3BucketPolicyDeleteOne {
+	builder := c.Delete().Where(s3bucketpolicy.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3BucketPolicyDeleteOne{builder}
+}
+
+// Query returns a query builder for S3BucketPolicy.
+func (c *S3BucketPolicyClient) Query() *S3BucketPolicyQuery {
+	return &S3BucketPolicyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3BucketPolicy},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3BucketPolicy entity by its id.
+func (c *S3BucketPolicyClient) Get(ctx context.Context, id int) (*S3BucketPolicy, error) {
+	return c.Query().Where(s3bucketpolicy.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3BucketPolicyClient) GetX(ctx context.Context, id int) *S3BucketPolicy {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3BucketPolicyClient) Hooks() []Hook {
+	return c.hooks.S3BucketPolicy
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3BucketPolicyClient) Interceptors() []Interceptor {
+	return c.inters.S3BucketPolicy
+}
+
+func (c *S3BucketPolicyClient) mutate(ctx context.Context, m *S3BucketPolicyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3BucketPolicyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3BucketPolicyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3BucketPolicyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3BucketPolicyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3BucketPolicy mutation op: %q", m.Op())
+	}
+}
+
+// S3EncryptionKeyClient is a client for the S3EncryptionKey schema.
+type S3EncryptionKeyClient struct {
+	config
+}
+
+// NewS3EncryptionKeyClient returns a client for the S3EncryptionKey from the given config.
+func NewS3EncryptionKeyClient(c config) *S3EncryptionKeyClient {
+	return &S3EncryptionKeyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3encryptionkey.Hooks(f(g(h())))`.
+func (c *S3EncryptionKeyClient) Use(hooks ...Hook) {
+	c.hooks.S3EncryptionKey = append(c.hooks.S3EncryptionKey, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3encryptionkey.Intercept(f(g(h())))`.
+func (c *S3EncryptionKeyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3EncryptionKey = append(c.inters.S3EncryptionKey, interceptors...)
+}
+
+// Create returns a builder for creating a S3EncryptionKey entity.
+func (c *S3EncryptionKeyClient) Create() *S3EncryptionKeyCreate {
+	mutation := newS3EncryptionKeyMutation(c.config, OpCreate)
+	return &S3EncryptionKeyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3EncryptionKey entities.
+func (c *S3EncryptionKeyClient) CreateBulk(builders ...*S3EncryptionKeyCreate) *S3EncryptionKeyCreateBulk {
+	return &S3EncryptionKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3EncryptionKeyClient) MapCreateBulk(slice any, setFunc func(*S3EncryptionKeyCreate, int)) *S3EncryptionKeyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3EncryptionKeyCreateBulk{err: fmt.Errorf("calling to S3EncryptionKeyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3EncryptionKeyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3EncryptionKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3EncryptionKey.
+func (c *S3EncryptionKeyClient) Update() *S3EncryptionKeyUpdate {
+	mutation := newS3EncryptionKeyMutation(c.config, OpUpdate)
+	return &S3EncryptionKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3EncryptionKeyClient) UpdateOne(_m *S3EncryptionKey) *S3EncryptionKeyUpdateOne {
+	mutation := newS3EncryptionKeyMutation(c.config, OpUpdateOne, withS3EncryptionKey(_m))
+	return &S3EncryptionKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3EncryptionKeyClient) UpdateOneID(id int) *S3EncryptionKeyUpdateOne {
+	mutation := newS3EncryptionKeyMutation(c.config, OpUpdateOne, withS3EncryptionKeyID(id))
+	return &S3EncryptionKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3EncryptionKey.
+func (c *S3EncryptionKeyClient) Delete() *S3EncryptionKeyDelete {
+	mutation := newS3EncryptionKeyMutation(c.config, OpDelete)
+	return &S3EncryptionKeyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3EncryptionKeyClient) DeleteOne(_m *S3EncryptionKey) *S3EncryptionKeyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3EncryptionKeyClient) DeleteOneID(id int) *S3EncryptionKeyDeleteOne {
+	builder := c.Delete().Where(s3encryptionkey.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3EncryptionKeyDeleteOne{builder}
+}
+
+// Query returns a query builder for S3EncryptionKey.
+func (c *S3EncryptionKeyClient) Query() *S3EncryptionKeyQuery {
+	return &S3EncryptionKeyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3EncryptionKey},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3EncryptionKey entity by its id.
+func (c *S3EncryptionKeyClient) Get(ctx context.Context, id int) (*S3EncryptionKey, error) {
+	return c.Query().Where(s3encryptionkey.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3EncryptionKeyClient) GetX(ctx context.Context, id int) *S3EncryptionKey {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3EncryptionKeyClient) Hooks() []Hook {
+	return c.hooks.S3EncryptionKey
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3EncryptionKeyClient) Interceptors() []Interceptor {
+	return c.inters.S3EncryptionKey
+}
+
+func (c *S3EncryptionKeyClient) mutate(ctx context.Context, m *S3EncryptionKeyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3EncryptionKeyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3EncryptionKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3EncryptionKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3EncryptionKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3EncryptionKey mutation op: %q", m.Op())
+	}
+}
+
+// S3MultipartPartClient is a client for the S3MultipartPart schema.
+type S3MultipartPartClient struct {
+	config
+}
+
+// NewS3MultipartPartClient returns a client for the S3MultipartPart from the given config.
+func NewS3MultipartPartClient(c config) *S3MultipartPartClient {
+	return &S3MultipartPartClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3multipartpart.Hooks(f(g(h())))`.
+func (c *S3MultipartPartClient) Use(hooks ...Hook) {
+	c.hooks.S3MultipartPart = append(c.hooks.S3MultipartPart, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3multipartpart.Intercept(f(g(h())))`.
+func (c *S3MultipartPartClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3MultipartPart = append(c.inters.S3MultipartPart, interceptors...)
+}
+
+// Create returns a builder for creating a S3MultipartPart entity.
+func (c *S3MultipartPartClient) Create() *S3MultipartPartCreate {
+	mutation := newS3MultipartPartMutation(c.config, OpCreate)
+	return &S3MultipartPartCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3MultipartPart entities.
+func (c *S3MultipartPartClient) CreateBulk(builders ...*S3MultipartPartCreate) *S3MultipartPartCreateBulk {
+	return &S3MultipartPartCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3MultipartPartClient) MapCreateBulk(slice any, setFunc func(*S3MultipartPartCreate, int)) *S3MultipartPartCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3MultipartPartCreateBulk{err: fmt.Errorf("calling to S3MultipartPartClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3MultipartPartCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3MultipartPartCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3MultipartPart.
+func (c *S3MultipartPartClient) Update() *S3MultipartPartUpdate {
+	mutation := newS3MultipartPartMutation(c.config, OpUpdate)
+	return &S3MultipartPartUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3MultipartPartClient) UpdateOne(_m *S3MultipartPart) *S3MultipartPartUpdateOne {
+	mutation := newS3MultipartPartMutation(c.config, OpUpdateOne, withS3MultipartPart(_m))
+	return &S3MultipartPartUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3MultipartPartClient) UpdateOneID(id int) *S3MultipartPartUpdateOne {
+	mutation := newS3MultipartPartMutation(c.config, OpUpdateOne, withS3MultipartPartID(id))
+	return &S3MultipartPartUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3MultipartPart.
+func (c *S3MultipartPartClient) Delete() *S3MultipartPartDelete {
+	mutation := newS3MultipartPartMutation(c.config, OpDelete)
+	return &S3MultipartPartDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3MultipartPartClient) DeleteOne(_m *S3MultipartPart) *S3MultipartPartDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3MultipartPartClient) DeleteOneID(id int) *S3MultipartPartDeleteOne {
+	builder := c.Delete().Where(s3multipartpart.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3MultipartPartDeleteOne{builder}
+}
+
+// Query returns a query builder for S3MultipartPart.
+func (c *S3MultipartPartClient) Query() *S3MultipartPartQuery {
+	return &S3MultipartPartQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3MultipartPart},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3MultipartPart entity by its id.
+func (c *S3MultipartPartClient) Get(ctx context.Context, id int) (*S3MultipartPart, error) {
+	return c.Query().Where(s3multipartpart.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3MultipartPartClient) GetX(ctx context.Context, id int) *S3MultipartPart {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3MultipartPartClient) Hooks() []Hook {
+	return c.hooks.S3MultipartPart
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3MultipartPartClient) Interceptors() []Interceptor {
+	return c.inters.S3MultipartPart
+}
+
+func (c *S3MultipartPartClient) mutate(ctx context.Context, m *S3MultipartPartMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3MultipartPartCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3MultipartPartUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3MultipartPartUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3MultipartPartDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3MultipartPart mutation op: %q", m.Op())
+	}
+}
+
+// S3MultipartUploadClient is a client for the S3MultipartUpload schema.
+type S3MultipartUploadClient struct {
+	config
+}
+
+// NewS3MultipartUploadClient returns a client for the S3MultipartUpload from the given config.
+func NewS3MultipartUploadClient(c config) *S3MultipartUploadClient {
+	return &S3MultipartUploadClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3multipartupload.Hooks(f(g(h())))`.
+func (c *S3MultipartUploadClient) Use(hooks ...Hook) {
+	c.hooks.S3MultipartUpload = append(c.hooks.S3MultipartUpload, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3multipartupload.Intercept(f(g(h())))`.
+func (c *S3MultipartUploadClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3MultipartUpload = append(c.inters.S3MultipartUpload, interceptors...)
+}
+
+// Create returns a builder for creating a S3MultipartUpload entity.
+func (c *S3MultipartUploadClient) Create() *S3MultipartUploadCreate {
+	mutation := newS3MultipartUploadMutation(c.config, OpCreate)
+	return &S3MultipartUploadCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3MultipartUpload entities.
+func (c *S3MultipartUploadClient) CreateBulk(builders ...*S3MultipartUploadCreate) *S3MultipartUploadCreateBulk {
+	return &S3MultipartUploadCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3MultipartUploadClient) MapCreateBulk(slice any, setFunc func(*S3MultipartUploadCreate, int)) *S3MultipartUploadCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3MultipartUploadCreateBulk{err: fmt.Errorf("calling to S3MultipartUploadClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3MultipartUploadCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3MultipartUploadCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3MultipartUpload.
+func (c *S3MultipartUploadClient) Update() *S3MultipartUploadUpdate {
+	mutation := newS3MultipartUploadMutation(c.config, OpUpdate)
+	return &S3MultipartUploadUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3MultipartUploadClient) UpdateOne(_m *S3MultipartUpload) *S3MultipartUploadUpdateOne {
+	mutation := newS3MultipartUploadMutation(c.config, OpUpdateOne, withS3MultipartUpload(_m))
+	return &S3MultipartUploadUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3MultipartUploadClient) UpdateOneID(id int) *S3MultipartUploadUpdateOne {
+	mutation := newS3MultipartUploadMutation(c.config, OpUpdateOne, withS3MultipartUploadID(id))
+	return &S3MultipartUploadUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3MultipartUpload.
+func (c *S3MultipartUploadClient) Delete() *S3MultipartUploadDelete {
+	mutation := newS3MultipartUploadMutation(c.config, OpDelete)
+	return &S3MultipartUploadDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3MultipartUploadClient) DeleteOne(_m *S3MultipartUpload) *S3MultipartUploadDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3MultipartUploadClient) DeleteOneID(id int) *S3MultipartUploadDeleteOne {
+	builder := c.Delete().Where(s3multipartupload.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3MultipartUploadDeleteOne{builder}
+}
+
+// Query returns a query builder for S3MultipartUpload.
+func (c *S3MultipartUploadClient) Query() *S3MultipartUploadQuery {
+	return &S3MultipartUploadQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3MultipartUpload},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3MultipartUpload entity by its id.
+func (c *S3MultipartUploadClient) Get(ctx context.Context, id int) (*S3MultipartUpload, error) {
+	return c.Query().Where(s3multipartupload.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3MultipartUploadClient) GetX(ctx context.Context, id int) *S3MultipartUpload {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3MultipartUploadClient) Hooks() []Hook {
+	return c.hooks.S3MultipartUpload
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3MultipartUploadClient) Interceptors() []Interceptor {
+	return c.inters.S3MultipartUpload
+}
+
+func (c *S3MultipartUploadClient) mutate(ctx context.Context, m *S3MultipartUploadMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3MultipartUploadCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3MultipartUploadUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3MultipartUploadUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3MultipartUploadDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3MultipartUpload mutation op: %q", m.Op())
+	}
+}
+
+// S3ObjectClient is a client for the S3Object schema.
+type S3ObjectClient struct {
+	config
+}
+
+// NewS3ObjectClient returns a client for the S3Object from the given config.
+func NewS3ObjectClient(c config) *S3ObjectClient {
+	return &S3ObjectClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3object.Hooks(f(g(h())))`.
+func (c *S3ObjectClient) Use(hooks ...Hook) {
+	c.hooks.S3Object = append(c.hooks.S3Object, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3object.Intercept(f(g(h())))`.
+func (c *S3ObjectClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3Object = append(c.inters.S3Object, interceptors...)
+}
+
+// Create returns a builder for creating a S3Object entity.
+func (c *S3ObjectClient) Create() *S3ObjectCreate {
+	mutation := newS3ObjectMutation(c.config, OpCreate)
+	return &S3ObjectCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3Object entities.
+func (c *S3ObjectClient) CreateBulk(builders ...*S3ObjectCreate) *S3ObjectCreateBulk {
+	return &S3ObjectCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3ObjectClient) MapCreateBulk(slice any, setFunc func(*S3ObjectCreate, int)) *S3ObjectCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3ObjectCreateBulk{err: fmt.Errorf("calling to S3ObjectClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3ObjectCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3ObjectCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3Object.
+func (c *S3ObjectClient) Update() *S3ObjectUpdate {
+	mutation := newS3ObjectMutation(c.config, OpUpdate)
+	return &S3ObjectUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3ObjectClient) UpdateOne(_m *S3Object) *S3ObjectUpdateOne {
+	mutation := newS3ObjectMutation(c.config, OpUpdateOne, withS3Object(_m))
+	return &S3ObjectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3ObjectClient) UpdateOneID(id int) *S3ObjectUpdateOne {
+	mutation := newS3ObjectMutation(c.config, OpUpdateOne, withS3ObjectID(id))
+	return &S3ObjectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3Object.
+func (c *S3ObjectClient) Delete() *S3ObjectDelete {
+	mutation := newS3ObjectMutation(c.config, OpDelete)
+	return &S3ObjectDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3ObjectClient) DeleteOne(_m *S3Object) *S3ObjectDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3ObjectClient) DeleteOneID(id int) *S3ObjectDeleteOne {
+	builder := c.Delete().Where(s3object.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3ObjectDeleteOne{builder}
+}
+
+// Query returns a query builder for S3Object.
+func (c *S3ObjectClient) Query() *S3ObjectQuery {
+	return &S3ObjectQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3Object},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3Object entity by its id.
+func (c *S3ObjectClient) Get(ctx context.Context, id int) (*S3Object, error) {
+	return c.Query().Where(s3object.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3ObjectClient) GetX(ctx context.Context, id int) *S3Object {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3ObjectClient) Hooks() []Hook {
+	return c.hooks.S3Object
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3ObjectClient) Interceptors() []Interceptor {
+	return c.inters.S3Object
+}
+
+func (c *S3ObjectClient) mutate(ctx context.Context, m *S3ObjectMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3ObjectCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3ObjectUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3ObjectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3ObjectDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3Object mutation op: %q", m.Op())
+	}
+}
+
+// S3ObjectACLClient is a client for the S3ObjectACL schema.
+type S3ObjectACLClient struct {
+	config
+}
+
+// NewS3ObjectACLClient returns a client for the S3ObjectACL from the given config.
+func NewS3ObjectACLClient(c config) *S3ObjectACLClient {
+	return &S3ObjectACLClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3objectacl.Hooks(f(g(h())))`.
+func (c *S3ObjectACLClient) Use(hooks ...Hook) {
+	c.hooks.S3ObjectACL = append(c.hooks.S3ObjectACL, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3objectacl.Intercept(f(g(h())))`.
+func (c *S3ObjectACLClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3ObjectACL = append(c.inters.S3ObjectACL, interceptors...)
+}
+
+// Create returns a builder for creating a S3ObjectACL entity.
+func (c *S3ObjectACLClient) Create() *S3ObjectACLCreate {
+	mutation := newS3ObjectACLMutation(c.config, OpCreate)
+	return &S3ObjectACLCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3ObjectACL entities.
+func (c *S3ObjectACLClient) CreateBulk(builders ...*S3ObjectACLCreate) *S3ObjectACLCreateBulk {
+	return &S3ObjectACLCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3ObjectACLClient) MapCreateBulk(slice any, setFunc func(*S3ObjectACLCreate, int)) *S3ObjectACLCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3ObjectACLCreateBulk{err: fmt.Errorf("calling to S3ObjectACLClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3ObjectACLCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3ObjectACLCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3ObjectACL.
+func (c *S3ObjectACLClient) Update() *S3ObjectACLUpdate {
+	mutation := newS3ObjectACLMutation(c.config, OpUpdate)
+	return &S3ObjectACLUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3ObjectACLClient) UpdateOne(_m *S3ObjectACL) *S3ObjectACLUpdateOne {
+	mutation := newS3ObjectACLMutation(c.config, OpUpdateOne, withS3ObjectACL(_m))
+	return &S3ObjectACLUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3ObjectACLClient) UpdateOneID(id int) *S3ObjectACLUpdateOne {
+	mutation := newS3ObjectACLMutation(c.config, OpUpdateOne, withS3ObjectACLID(id))
+	return &S3ObjectACLUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3ObjectACL.
+func (c *S3ObjectACLClient) Delete() *S3ObjectACLDelete {
+	mutation := newS3ObjectACLMutation(c.config, OpDelete)
+	return &S3ObjectACLDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3ObjectACLClient) DeleteOne(_m *S3ObjectACL) *S3ObjectACLDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3ObjectACLClient) DeleteOneID(id int) *S3ObjectACLDeleteOne {
+	builder := c.Delete().Where(s3objectacl.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3ObjectACLDeleteOne{builder}
+}
+
+// Query returns a query builder for S3ObjectACL.
+func (c *S3ObjectACLClient) Query() *S3ObjectACLQuery {
+	return &S3ObjectACLQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3ObjectACL},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3ObjectACL entity by its id.
+func (c *S3ObjectACLClient) Get(ctx context.Context, id int) (*S3ObjectACL, error) {
+	return c.Query().Where(s3objectacl.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3ObjectACLClient) GetX(ctx context.Context, id int) *S3ObjectACL {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3ObjectACLClient) Hooks() []Hook {
+	return c.hooks.S3ObjectACL
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3ObjectACLClient) Interceptors() []Interceptor {
+	return c.inters.S3ObjectACL
+}
+
+func (c *S3ObjectACLClient) mutate(ctx context.Context, m *S3ObjectACLMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3ObjectACLCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3ObjectACLUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3ObjectACLUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3ObjectACLDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3ObjectACL mutation op: %q", m.Op())
+	}
+}
+
+// S3ObjectEncryptionClient is a client for the S3ObjectEncryption schema.
+type S3ObjectEncryptionClient struct {
+	config
+}
+
+// NewS3ObjectEncryptionClient returns a client for the S3ObjectEncryption from the given config.
+func NewS3ObjectEncryptionClient(c config) *S3ObjectEncryptionClient {
+	return &S3ObjectEncryptionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `s3objectencryption.Hooks(f(g(h())))`.
+func (c *S3ObjectEncryptionClient) Use(hooks ...Hook) {
+	c.hooks.S3ObjectEncryption = append(c.hooks.S3ObjectEncryption, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `s3objectencryption.Intercept(f(g(h())))`.
+func (c *S3ObjectEncryptionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.S3ObjectEncryption = append(c.inters.S3ObjectEncryption, interceptors...)
+}
+
+// Create returns a builder for creating a S3ObjectEncryption entity.
+func (c *S3ObjectEncryptionClient) Create() *S3ObjectEncryptionCreate {
+	mutation := newS3ObjectEncryptionMutation(c.config, OpCreate)
+	return &S3ObjectEncryptionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of S3ObjectEncryption entities.
+func (c *S3ObjectEncryptionClient) CreateBulk(builders ...*S3ObjectEncryptionCreate) *S3ObjectEncryptionCreateBulk {
+	return &S3ObjectEncryptionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *S3ObjectEncryptionClient) MapCreateBulk(slice any, setFunc func(*S3ObjectEncryptionCreate, int)) *S3ObjectEncryptionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &S3ObjectEncryptionCreateBulk{err: fmt.Errorf("calling to S3ObjectEncryptionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*S3ObjectEncryptionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &S3ObjectEncryptionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for S3ObjectEncryption.
+func (c *S3ObjectEncryptionClient) Update() *S3ObjectEncryptionUpdate {
+	mutation := newS3ObjectEncryptionMutation(c.config, OpUpdate)
+	return &S3ObjectEncryptionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *S3ObjectEncryptionClient) UpdateOne(_m *S3ObjectEncryption) *S3ObjectEncryptionUpdateOne {
+	mutation := newS3ObjectEncryptionMutation(c.config, OpUpdateOne, withS3ObjectEncryption(_m))
+	return &S3ObjectEncryptionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *S3ObjectEncryptionClient) UpdateOneID(id int) *S3ObjectEncryptionUpdateOne {
+	mutation := newS3ObjectEncryptionMutation(c.config, OpUpdateOne, withS3ObjectEncryptionID(id))
+	return &S3ObjectEncryptionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for S3ObjectEncryption.
+func (c *S3ObjectEncryptionClient) Delete() *S3ObjectEncryptionDelete {
+	mutation := newS3ObjectEncryptionMutation(c.config, OpDelete)
+	return &S3ObjectEncryptionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *S3ObjectEncryptionClient) DeleteOne(_m *S3ObjectEncryption) *S3ObjectEncryptionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *S3ObjectEncryptionClient) DeleteOneID(id int) *S3ObjectEncryptionDeleteOne {
+	builder := c.Delete().Where(s3objectencryption.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &S3ObjectEncryptionDeleteOne{builder}
+}
+
+// Query returns a query builder for S3ObjectEncryption.
+func (c *S3ObjectEncryptionClient) Query() *S3ObjectEncryptionQuery {
+	return &S3ObjectEncryptionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeS3ObjectEncryption},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a S3ObjectEncryption entity by its id.
+func (c *S3ObjectEncryptionClient) Get(ctx context.Context, id int) (*S3ObjectEncryption, error) {
+	return c.Query().Where(s3objectencryption.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *S3ObjectEncryptionClient) GetX(ctx context.Context, id int) *S3ObjectEncryption {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *S3ObjectEncryptionClient) Hooks() []Hook {
+	return c.hooks.S3ObjectEncryption
+}
+
+// Interceptors returns the client interceptors.
+func (c *S3ObjectEncryptionClient) Interceptors() []Interceptor {
+	return c.inters.S3ObjectEncryption
+}
+
+func (c *S3ObjectEncryptionClient) mutate(ctx context.Context, m *S3ObjectEncryptionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&S3ObjectEncryptionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&S3ObjectEncryptionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&S3ObjectEncryptionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&S3ObjectEncryptionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown S3ObjectEncryption mutation op: %q", m.Op())
+	}
+}
+
 // ShareClient is a client for the Share schema.
 type ShareClient struct {
 	config
@@ -1966,6 +3672,139 @@ func (c *ShareClient) mutate(ctx context.Context, m *ShareMutation) (Value, erro
 		return (&ShareDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Share mutation op: %q", m.Op())
+	}
+}
+
+// SysConfigClient is a client for the SysConfig schema.
+type SysConfigClient struct {
+	config
+}
+
+// NewSysConfigClient returns a client for the SysConfig from the given config.
+func NewSysConfigClient(c config) *SysConfigClient {
+	return &SysConfigClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sysconfig.Hooks(f(g(h())))`.
+func (c *SysConfigClient) Use(hooks ...Hook) {
+	c.hooks.SysConfig = append(c.hooks.SysConfig, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sysconfig.Intercept(f(g(h())))`.
+func (c *SysConfigClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SysConfig = append(c.inters.SysConfig, interceptors...)
+}
+
+// Create returns a builder for creating a SysConfig entity.
+func (c *SysConfigClient) Create() *SysConfigCreate {
+	mutation := newSysConfigMutation(c.config, OpCreate)
+	return &SysConfigCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SysConfig entities.
+func (c *SysConfigClient) CreateBulk(builders ...*SysConfigCreate) *SysConfigCreateBulk {
+	return &SysConfigCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SysConfigClient) MapCreateBulk(slice any, setFunc func(*SysConfigCreate, int)) *SysConfigCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SysConfigCreateBulk{err: fmt.Errorf("calling to SysConfigClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SysConfigCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SysConfigCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SysConfig.
+func (c *SysConfigClient) Update() *SysConfigUpdate {
+	mutation := newSysConfigMutation(c.config, OpUpdate)
+	return &SysConfigUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SysConfigClient) UpdateOne(_m *SysConfig) *SysConfigUpdateOne {
+	mutation := newSysConfigMutation(c.config, OpUpdateOne, withSysConfig(_m))
+	return &SysConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SysConfigClient) UpdateOneID(id int) *SysConfigUpdateOne {
+	mutation := newSysConfigMutation(c.config, OpUpdateOne, withSysConfigID(id))
+	return &SysConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SysConfig.
+func (c *SysConfigClient) Delete() *SysConfigDelete {
+	mutation := newSysConfigMutation(c.config, OpDelete)
+	return &SysConfigDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SysConfigClient) DeleteOne(_m *SysConfig) *SysConfigDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SysConfigClient) DeleteOneID(id int) *SysConfigDeleteOne {
+	builder := c.Delete().Where(sysconfig.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SysConfigDeleteOne{builder}
+}
+
+// Query returns a query builder for SysConfig.
+func (c *SysConfigClient) Query() *SysConfigQuery {
+	return &SysConfigQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSysConfig},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SysConfig entity by its id.
+func (c *SysConfigClient) Get(ctx context.Context, id int) (*SysConfig, error) {
+	return c.Query().Where(sysconfig.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SysConfigClient) GetX(ctx context.Context, id int) *SysConfig {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SysConfigClient) Hooks() []Hook {
+	return c.hooks.SysConfig
+}
+
+// Interceptors returns the client interceptors.
+func (c *SysConfigClient) Interceptors() []Interceptor {
+	return c.inters.SysConfig
+}
+
+func (c *SysConfigClient) mutate(ctx context.Context, m *SysConfigMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SysConfigCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SysConfigUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SysConfigUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SysConfigDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SysConfig mutation op: %q", m.Op())
 	}
 }
 
@@ -2967,13 +4806,19 @@ func (c *VirtualPathClient) mutate(ctx context.Context, m *VirtualPathMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, DownloadTask, Drive, Entry, FileChunk, FileInfo, Group, GroupPower,
-		Power, Recycled, Share, UploadChunk, UploadPart, UploadSession, UploadTask,
-		User, UserFile, VirtualPath []ent.Hook
+		APIKey, Disk, DownloadTask, Drive, Entry, FileChunk, FileInfo, Group,
+		GroupPower, Power, Recycled, S3Bucket, S3BucketACL, S3BucketCORS,
+		S3BucketLifecycle, S3BucketPolicy, S3EncryptionKey, S3MultipartPart,
+		S3MultipartUpload, S3Object, S3ObjectACL, S3ObjectEncryption, Share, SysConfig,
+		UploadChunk, UploadPart, UploadSession, UploadTask, User, UserFile,
+		VirtualPath []ent.Hook
 	}
 	inters struct {
-		APIKey, DownloadTask, Drive, Entry, FileChunk, FileInfo, Group, GroupPower,
-		Power, Recycled, Share, UploadChunk, UploadPart, UploadSession, UploadTask,
-		User, UserFile, VirtualPath []ent.Interceptor
+		APIKey, Disk, DownloadTask, Drive, Entry, FileChunk, FileInfo, Group,
+		GroupPower, Power, Recycled, S3Bucket, S3BucketACL, S3BucketCORS,
+		S3BucketLifecycle, S3BucketPolicy, S3EncryptionKey, S3MultipartPart,
+		S3MultipartUpload, S3Object, S3ObjectACL, S3ObjectEncryption, Share, SysConfig,
+		UploadChunk, UploadPart, UploadSession, UploadTask, User, UserFile,
+		VirtualPath []ent.Interceptor
 	}
 )

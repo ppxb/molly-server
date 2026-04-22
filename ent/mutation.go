@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"molly-server/ent/apikey"
+	"molly-server/ent/disk"
 	"molly-server/ent/downloadtask"
 	"molly-server/ent/drive"
 	"molly-server/ent/entry"
@@ -17,7 +18,19 @@ import (
 	"molly-server/ent/power"
 	"molly-server/ent/predicate"
 	"molly-server/ent/recycled"
+	"molly-server/ent/s3bucket"
+	"molly-server/ent/s3bucketacl"
+	"molly-server/ent/s3bucketcors"
+	"molly-server/ent/s3bucketlifecycle"
+	"molly-server/ent/s3bucketpolicy"
+	"molly-server/ent/s3encryptionkey"
+	"molly-server/ent/s3multipartpart"
+	"molly-server/ent/s3multipartupload"
+	"molly-server/ent/s3object"
+	"molly-server/ent/s3objectacl"
+	"molly-server/ent/s3objectencryption"
 	"molly-server/ent/share"
+	"molly-server/ent/sysconfig"
 	"molly-server/ent/uploadchunk"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
@@ -41,24 +54,37 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeAPIKey        = "APIKey"
-	TypeDownloadTask  = "DownloadTask"
-	TypeDrive         = "Drive"
-	TypeEntry         = "Entry"
-	TypeFileChunk     = "FileChunk"
-	TypeFileInfo      = "FileInfo"
-	TypeGroup         = "Group"
-	TypeGroupPower    = "GroupPower"
-	TypePower         = "Power"
-	TypeRecycled      = "Recycled"
-	TypeShare         = "Share"
-	TypeUploadChunk   = "UploadChunk"
-	TypeUploadPart    = "UploadPart"
-	TypeUploadSession = "UploadSession"
-	TypeUploadTask    = "UploadTask"
-	TypeUser          = "User"
-	TypeUserFile      = "UserFile"
-	TypeVirtualPath   = "VirtualPath"
+	TypeAPIKey             = "APIKey"
+	TypeDisk               = "Disk"
+	TypeDownloadTask       = "DownloadTask"
+	TypeDrive              = "Drive"
+	TypeEntry              = "Entry"
+	TypeFileChunk          = "FileChunk"
+	TypeFileInfo           = "FileInfo"
+	TypeGroup              = "Group"
+	TypeGroupPower         = "GroupPower"
+	TypePower              = "Power"
+	TypeRecycled           = "Recycled"
+	TypeS3Bucket           = "S3Bucket"
+	TypeS3BucketACL        = "S3BucketACL"
+	TypeS3BucketCORS       = "S3BucketCORS"
+	TypeS3BucketLifecycle  = "S3BucketLifecycle"
+	TypeS3BucketPolicy     = "S3BucketPolicy"
+	TypeS3EncryptionKey    = "S3EncryptionKey"
+	TypeS3MultipartPart    = "S3MultipartPart"
+	TypeS3MultipartUpload  = "S3MultipartUpload"
+	TypeS3Object           = "S3Object"
+	TypeS3ObjectACL        = "S3ObjectACL"
+	TypeS3ObjectEncryption = "S3ObjectEncryption"
+	TypeShare              = "Share"
+	TypeSysConfig          = "SysConfig"
+	TypeUploadChunk        = "UploadChunk"
+	TypeUploadPart         = "UploadPart"
+	TypeUploadSession      = "UploadSession"
+	TypeUploadTask         = "UploadTask"
+	TypeUser               = "User"
+	TypeUserFile           = "UserFile"
+	TypeVirtualPath        = "VirtualPath"
 )
 
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
@@ -731,6 +757,482 @@ func (m *APIKeyMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown APIKey edge %s", name)
+}
+
+// DiskMutation represents an operation that mutates the Disk nodes in the graph.
+type DiskMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *string
+	size          *int64
+	addsize       *int64
+	disk_path     *string
+	data_path     *string
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*Disk, error)
+	predicates    []predicate.Disk
+}
+
+var _ ent.Mutation = (*DiskMutation)(nil)
+
+// diskOption allows management of the mutation configuration using functional options.
+type diskOption func(*DiskMutation)
+
+// newDiskMutation creates new mutation for the Disk entity.
+func newDiskMutation(c config, op Op, opts ...diskOption) *DiskMutation {
+	m := &DiskMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeDisk,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withDiskID sets the ID field of the mutation.
+func withDiskID(id string) diskOption {
+	return func(m *DiskMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Disk
+		)
+		m.oldValue = func(ctx context.Context) (*Disk, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Disk.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withDisk sets the old Disk of the mutation.
+func withDisk(node *Disk) diskOption {
+	return func(m *DiskMutation) {
+		m.oldValue = func(context.Context) (*Disk, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m DiskMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m DiskMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Disk entities.
+func (m *DiskMutation) SetID(id string) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *DiskMutation) ID() (id string, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *DiskMutation) IDs(ctx context.Context) ([]string, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []string{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Disk.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetSize sets the "size" field.
+func (m *DiskMutation) SetSize(i int64) {
+	m.size = &i
+	m.addsize = nil
+}
+
+// Size returns the value of the "size" field in the mutation.
+func (m *DiskMutation) Size() (r int64, exists bool) {
+	v := m.size
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSize returns the old "size" field's value of the Disk entity.
+// If the Disk object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DiskMutation) OldSize(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSize is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSize requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSize: %w", err)
+	}
+	return oldValue.Size, nil
+}
+
+// AddSize adds i to the "size" field.
+func (m *DiskMutation) AddSize(i int64) {
+	if m.addsize != nil {
+		*m.addsize += i
+	} else {
+		m.addsize = &i
+	}
+}
+
+// AddedSize returns the value that was added to the "size" field in this mutation.
+func (m *DiskMutation) AddedSize() (r int64, exists bool) {
+	v := m.addsize
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSize resets all changes to the "size" field.
+func (m *DiskMutation) ResetSize() {
+	m.size = nil
+	m.addsize = nil
+}
+
+// SetDiskPath sets the "disk_path" field.
+func (m *DiskMutation) SetDiskPath(s string) {
+	m.disk_path = &s
+}
+
+// DiskPath returns the value of the "disk_path" field in the mutation.
+func (m *DiskMutation) DiskPath() (r string, exists bool) {
+	v := m.disk_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiskPath returns the old "disk_path" field's value of the Disk entity.
+// If the Disk object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DiskMutation) OldDiskPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiskPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiskPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiskPath: %w", err)
+	}
+	return oldValue.DiskPath, nil
+}
+
+// ResetDiskPath resets all changes to the "disk_path" field.
+func (m *DiskMutation) ResetDiskPath() {
+	m.disk_path = nil
+}
+
+// SetDataPath sets the "data_path" field.
+func (m *DiskMutation) SetDataPath(s string) {
+	m.data_path = &s
+}
+
+// DataPath returns the value of the "data_path" field in the mutation.
+func (m *DiskMutation) DataPath() (r string, exists bool) {
+	v := m.data_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDataPath returns the old "data_path" field's value of the Disk entity.
+// If the Disk object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *DiskMutation) OldDataPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDataPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDataPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDataPath: %w", err)
+	}
+	return oldValue.DataPath, nil
+}
+
+// ResetDataPath resets all changes to the "data_path" field.
+func (m *DiskMutation) ResetDataPath() {
+	m.data_path = nil
+}
+
+// Where appends a list predicates to the DiskMutation builder.
+func (m *DiskMutation) Where(ps ...predicate.Disk) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the DiskMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *DiskMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Disk, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *DiskMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *DiskMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Disk).
+func (m *DiskMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *DiskMutation) Fields() []string {
+	fields := make([]string, 0, 3)
+	if m.size != nil {
+		fields = append(fields, disk.FieldSize)
+	}
+	if m.disk_path != nil {
+		fields = append(fields, disk.FieldDiskPath)
+	}
+	if m.data_path != nil {
+		fields = append(fields, disk.FieldDataPath)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *DiskMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case disk.FieldSize:
+		return m.Size()
+	case disk.FieldDiskPath:
+		return m.DiskPath()
+	case disk.FieldDataPath:
+		return m.DataPath()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *DiskMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case disk.FieldSize:
+		return m.OldSize(ctx)
+	case disk.FieldDiskPath:
+		return m.OldDiskPath(ctx)
+	case disk.FieldDataPath:
+		return m.OldDataPath(ctx)
+	}
+	return nil, fmt.Errorf("unknown Disk field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *DiskMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case disk.FieldSize:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSize(v)
+		return nil
+	case disk.FieldDiskPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiskPath(v)
+		return nil
+	case disk.FieldDataPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDataPath(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Disk field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *DiskMutation) AddedFields() []string {
+	var fields []string
+	if m.addsize != nil {
+		fields = append(fields, disk.FieldSize)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *DiskMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case disk.FieldSize:
+		return m.AddedSize()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *DiskMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case disk.FieldSize:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSize(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Disk numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *DiskMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *DiskMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *DiskMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Disk nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *DiskMutation) ResetField(name string) error {
+	switch name {
+	case disk.FieldSize:
+		m.ResetSize()
+		return nil
+	case disk.FieldDiskPath:
+		m.ResetDiskPath()
+		return nil
+	case disk.FieldDataPath:
+		m.ResetDataPath()
+		return nil
+	}
+	return fmt.Errorf("unknown Disk field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *DiskMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *DiskMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *DiskMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *DiskMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *DiskMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *DiskMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *DiskMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Disk unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *DiskMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Disk edge %s", name)
 }
 
 // DownloadTaskMutation represents an operation that mutates the DownloadTask nodes in the graph.
@@ -9027,6 +9529,7577 @@ func (m *RecycledMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Recycled edge %s", name)
 }
 
+// S3BucketMutation represents an operation that mutates the S3Bucket nodes in the graph.
+type S3BucketMutation struct {
+	config
+	op                 Op
+	typ                string
+	id                 *int
+	bucket_name        *string
+	user_id            *string
+	region             *string
+	virtual_path_id    *int
+	addvirtual_path_id *int
+	versioning         *string
+	created_at         *time.Time
+	updated_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*S3Bucket, error)
+	predicates         []predicate.S3Bucket
+}
+
+var _ ent.Mutation = (*S3BucketMutation)(nil)
+
+// s3bucketOption allows management of the mutation configuration using functional options.
+type s3bucketOption func(*S3BucketMutation)
+
+// newS3BucketMutation creates new mutation for the S3Bucket entity.
+func newS3BucketMutation(c config, op Op, opts ...s3bucketOption) *S3BucketMutation {
+	m := &S3BucketMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3Bucket,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3BucketID sets the ID field of the mutation.
+func withS3BucketID(id int) s3bucketOption {
+	return func(m *S3BucketMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3Bucket
+		)
+		m.oldValue = func(ctx context.Context) (*S3Bucket, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3Bucket.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3Bucket sets the old S3Bucket of the mutation.
+func withS3Bucket(node *S3Bucket) s3bucketOption {
+	return func(m *S3BucketMutation) {
+		m.oldValue = func(context.Context) (*S3Bucket, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3BucketMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3BucketMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3BucketMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3BucketMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3Bucket.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3BucketMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3BucketMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3BucketMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3BucketMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3BucketMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3BucketMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetRegion sets the "region" field.
+func (m *S3BucketMutation) SetRegion(s string) {
+	m.region = &s
+}
+
+// Region returns the value of the "region" field in the mutation.
+func (m *S3BucketMutation) Region() (r string, exists bool) {
+	v := m.region
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRegion returns the old "region" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldRegion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRegion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRegion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRegion: %w", err)
+	}
+	return oldValue.Region, nil
+}
+
+// ResetRegion resets all changes to the "region" field.
+func (m *S3BucketMutation) ResetRegion() {
+	m.region = nil
+}
+
+// SetVirtualPathID sets the "virtual_path_id" field.
+func (m *S3BucketMutation) SetVirtualPathID(i int) {
+	m.virtual_path_id = &i
+	m.addvirtual_path_id = nil
+}
+
+// VirtualPathID returns the value of the "virtual_path_id" field in the mutation.
+func (m *S3BucketMutation) VirtualPathID() (r int, exists bool) {
+	v := m.virtual_path_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVirtualPathID returns the old "virtual_path_id" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldVirtualPathID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVirtualPathID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVirtualPathID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVirtualPathID: %w", err)
+	}
+	return oldValue.VirtualPathID, nil
+}
+
+// AddVirtualPathID adds i to the "virtual_path_id" field.
+func (m *S3BucketMutation) AddVirtualPathID(i int) {
+	if m.addvirtual_path_id != nil {
+		*m.addvirtual_path_id += i
+	} else {
+		m.addvirtual_path_id = &i
+	}
+}
+
+// AddedVirtualPathID returns the value that was added to the "virtual_path_id" field in this mutation.
+func (m *S3BucketMutation) AddedVirtualPathID() (r int, exists bool) {
+	v := m.addvirtual_path_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetVirtualPathID resets all changes to the "virtual_path_id" field.
+func (m *S3BucketMutation) ResetVirtualPathID() {
+	m.virtual_path_id = nil
+	m.addvirtual_path_id = nil
+}
+
+// SetVersioning sets the "versioning" field.
+func (m *S3BucketMutation) SetVersioning(s string) {
+	m.versioning = &s
+}
+
+// Versioning returns the value of the "versioning" field in the mutation.
+func (m *S3BucketMutation) Versioning() (r string, exists bool) {
+	v := m.versioning
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersioning returns the old "versioning" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldVersioning(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersioning is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersioning requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersioning: %w", err)
+	}
+	return oldValue.Versioning, nil
+}
+
+// ResetVersioning resets all changes to the "versioning" field.
+func (m *S3BucketMutation) ResetVersioning() {
+	m.versioning = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3BucketMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3BucketMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3BucketMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3BucketMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3BucketMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3Bucket entity.
+// If the S3Bucket object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3BucketMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3BucketMutation builder.
+func (m *S3BucketMutation) Where(ps ...predicate.S3Bucket) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3BucketMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3BucketMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3Bucket, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3BucketMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3BucketMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3Bucket).
+func (m *S3BucketMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3BucketMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.bucket_name != nil {
+		fields = append(fields, s3bucket.FieldBucketName)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3bucket.FieldUserID)
+	}
+	if m.region != nil {
+		fields = append(fields, s3bucket.FieldRegion)
+	}
+	if m.virtual_path_id != nil {
+		fields = append(fields, s3bucket.FieldVirtualPathID)
+	}
+	if m.versioning != nil {
+		fields = append(fields, s3bucket.FieldVersioning)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3bucket.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3bucket.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3BucketMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3bucket.FieldBucketName:
+		return m.BucketName()
+	case s3bucket.FieldUserID:
+		return m.UserID()
+	case s3bucket.FieldRegion:
+		return m.Region()
+	case s3bucket.FieldVirtualPathID:
+		return m.VirtualPathID()
+	case s3bucket.FieldVersioning:
+		return m.Versioning()
+	case s3bucket.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3bucket.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3BucketMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3bucket.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3bucket.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3bucket.FieldRegion:
+		return m.OldRegion(ctx)
+	case s3bucket.FieldVirtualPathID:
+		return m.OldVirtualPathID(ctx)
+	case s3bucket.FieldVersioning:
+		return m.OldVersioning(ctx)
+	case s3bucket.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3bucket.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3Bucket field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3bucket.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3bucket.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3bucket.FieldRegion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRegion(v)
+		return nil
+	case s3bucket.FieldVirtualPathID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVirtualPathID(v)
+		return nil
+	case s3bucket.FieldVersioning:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersioning(v)
+		return nil
+	case s3bucket.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3bucket.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3Bucket field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3BucketMutation) AddedFields() []string {
+	var fields []string
+	if m.addvirtual_path_id != nil {
+		fields = append(fields, s3bucket.FieldVirtualPathID)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3BucketMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case s3bucket.FieldVirtualPathID:
+		return m.AddedVirtualPathID()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case s3bucket.FieldVirtualPathID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddVirtualPathID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3Bucket numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3BucketMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3BucketMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3BucketMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown S3Bucket nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3BucketMutation) ResetField(name string) error {
+	switch name {
+	case s3bucket.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3bucket.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3bucket.FieldRegion:
+		m.ResetRegion()
+		return nil
+	case s3bucket.FieldVirtualPathID:
+		m.ResetVirtualPathID()
+		return nil
+	case s3bucket.FieldVersioning:
+		m.ResetVersioning()
+		return nil
+	case s3bucket.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3bucket.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3Bucket field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3BucketMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3BucketMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3BucketMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3BucketMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3BucketMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3BucketMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3BucketMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3Bucket unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3BucketMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3Bucket edge %s", name)
+}
+
+// S3BucketACLMutation represents an operation that mutates the S3BucketACL nodes in the graph.
+type S3BucketACLMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	bucket_name   *string
+	user_id       *string
+	acl_config    *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*S3BucketACL, error)
+	predicates    []predicate.S3BucketACL
+}
+
+var _ ent.Mutation = (*S3BucketACLMutation)(nil)
+
+// s3bucketaclOption allows management of the mutation configuration using functional options.
+type s3bucketaclOption func(*S3BucketACLMutation)
+
+// newS3BucketACLMutation creates new mutation for the S3BucketACL entity.
+func newS3BucketACLMutation(c config, op Op, opts ...s3bucketaclOption) *S3BucketACLMutation {
+	m := &S3BucketACLMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3BucketACL,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3BucketACLID sets the ID field of the mutation.
+func withS3BucketACLID(id int) s3bucketaclOption {
+	return func(m *S3BucketACLMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3BucketACL
+		)
+		m.oldValue = func(ctx context.Context) (*S3BucketACL, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3BucketACL.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3BucketACL sets the old S3BucketACL of the mutation.
+func withS3BucketACL(node *S3BucketACL) s3bucketaclOption {
+	return func(m *S3BucketACLMutation) {
+		m.oldValue = func(context.Context) (*S3BucketACL, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3BucketACLMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3BucketACLMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3BucketACLMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3BucketACLMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3BucketACL.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3BucketACLMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3BucketACLMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3BucketACL entity.
+// If the S3BucketACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketACLMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3BucketACLMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3BucketACLMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3BucketACLMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3BucketACL entity.
+// If the S3BucketACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketACLMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3BucketACLMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetACLConfig sets the "acl_config" field.
+func (m *S3BucketACLMutation) SetACLConfig(s string) {
+	m.acl_config = &s
+}
+
+// ACLConfig returns the value of the "acl_config" field in the mutation.
+func (m *S3BucketACLMutation) ACLConfig() (r string, exists bool) {
+	v := m.acl_config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldACLConfig returns the old "acl_config" field's value of the S3BucketACL entity.
+// If the S3BucketACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketACLMutation) OldACLConfig(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldACLConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldACLConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldACLConfig: %w", err)
+	}
+	return oldValue.ACLConfig, nil
+}
+
+// ResetACLConfig resets all changes to the "acl_config" field.
+func (m *S3BucketACLMutation) ResetACLConfig() {
+	m.acl_config = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3BucketACLMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3BucketACLMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3BucketACL entity.
+// If the S3BucketACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketACLMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3BucketACLMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3BucketACLMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3BucketACLMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3BucketACL entity.
+// If the S3BucketACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketACLMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3BucketACLMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3BucketACLMutation builder.
+func (m *S3BucketACLMutation) Where(ps ...predicate.S3BucketACL) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3BucketACLMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3BucketACLMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3BucketACL, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3BucketACLMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3BucketACLMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3BucketACL).
+func (m *S3BucketACLMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3BucketACLMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.bucket_name != nil {
+		fields = append(fields, s3bucketacl.FieldBucketName)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3bucketacl.FieldUserID)
+	}
+	if m.acl_config != nil {
+		fields = append(fields, s3bucketacl.FieldACLConfig)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3bucketacl.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3bucketacl.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3BucketACLMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3bucketacl.FieldBucketName:
+		return m.BucketName()
+	case s3bucketacl.FieldUserID:
+		return m.UserID()
+	case s3bucketacl.FieldACLConfig:
+		return m.ACLConfig()
+	case s3bucketacl.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3bucketacl.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3BucketACLMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3bucketacl.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3bucketacl.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3bucketacl.FieldACLConfig:
+		return m.OldACLConfig(ctx)
+	case s3bucketacl.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3bucketacl.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3BucketACL field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketACLMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3bucketacl.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3bucketacl.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3bucketacl.FieldACLConfig:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetACLConfig(v)
+		return nil
+	case s3bucketacl.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3bucketacl.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketACL field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3BucketACLMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3BucketACLMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketACLMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3BucketACL numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3BucketACLMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3BucketACLMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3BucketACLMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown S3BucketACL nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3BucketACLMutation) ResetField(name string) error {
+	switch name {
+	case s3bucketacl.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3bucketacl.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3bucketacl.FieldACLConfig:
+		m.ResetACLConfig()
+		return nil
+	case s3bucketacl.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3bucketacl.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketACL field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3BucketACLMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3BucketACLMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3BucketACLMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3BucketACLMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3BucketACLMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3BucketACLMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3BucketACLMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketACL unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3BucketACLMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketACL edge %s", name)
+}
+
+// S3BucketCORSMutation represents an operation that mutates the S3BucketCORS nodes in the graph.
+type S3BucketCORSMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	bucket_name   *string
+	user_id       *string
+	cors_config   *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*S3BucketCORS, error)
+	predicates    []predicate.S3BucketCORS
+}
+
+var _ ent.Mutation = (*S3BucketCORSMutation)(nil)
+
+// s3bucketcorsOption allows management of the mutation configuration using functional options.
+type s3bucketcorsOption func(*S3BucketCORSMutation)
+
+// newS3BucketCORSMutation creates new mutation for the S3BucketCORS entity.
+func newS3BucketCORSMutation(c config, op Op, opts ...s3bucketcorsOption) *S3BucketCORSMutation {
+	m := &S3BucketCORSMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3BucketCORS,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3BucketCORSID sets the ID field of the mutation.
+func withS3BucketCORSID(id int) s3bucketcorsOption {
+	return func(m *S3BucketCORSMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3BucketCORS
+		)
+		m.oldValue = func(ctx context.Context) (*S3BucketCORS, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3BucketCORS.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3BucketCORS sets the old S3BucketCORS of the mutation.
+func withS3BucketCORS(node *S3BucketCORS) s3bucketcorsOption {
+	return func(m *S3BucketCORSMutation) {
+		m.oldValue = func(context.Context) (*S3BucketCORS, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3BucketCORSMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3BucketCORSMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3BucketCORSMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3BucketCORSMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3BucketCORS.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3BucketCORSMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3BucketCORSMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3BucketCORS entity.
+// If the S3BucketCORS object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketCORSMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3BucketCORSMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3BucketCORSMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3BucketCORSMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3BucketCORS entity.
+// If the S3BucketCORS object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketCORSMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3BucketCORSMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetCorsConfig sets the "cors_config" field.
+func (m *S3BucketCORSMutation) SetCorsConfig(s string) {
+	m.cors_config = &s
+}
+
+// CorsConfig returns the value of the "cors_config" field in the mutation.
+func (m *S3BucketCORSMutation) CorsConfig() (r string, exists bool) {
+	v := m.cors_config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorsConfig returns the old "cors_config" field's value of the S3BucketCORS entity.
+// If the S3BucketCORS object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketCORSMutation) OldCorsConfig(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorsConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorsConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorsConfig: %w", err)
+	}
+	return oldValue.CorsConfig, nil
+}
+
+// ResetCorsConfig resets all changes to the "cors_config" field.
+func (m *S3BucketCORSMutation) ResetCorsConfig() {
+	m.cors_config = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3BucketCORSMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3BucketCORSMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3BucketCORS entity.
+// If the S3BucketCORS object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketCORSMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3BucketCORSMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3BucketCORSMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3BucketCORSMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3BucketCORS entity.
+// If the S3BucketCORS object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketCORSMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3BucketCORSMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3BucketCORSMutation builder.
+func (m *S3BucketCORSMutation) Where(ps ...predicate.S3BucketCORS) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3BucketCORSMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3BucketCORSMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3BucketCORS, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3BucketCORSMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3BucketCORSMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3BucketCORS).
+func (m *S3BucketCORSMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3BucketCORSMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.bucket_name != nil {
+		fields = append(fields, s3bucketcors.FieldBucketName)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3bucketcors.FieldUserID)
+	}
+	if m.cors_config != nil {
+		fields = append(fields, s3bucketcors.FieldCorsConfig)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3bucketcors.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3bucketcors.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3BucketCORSMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3bucketcors.FieldBucketName:
+		return m.BucketName()
+	case s3bucketcors.FieldUserID:
+		return m.UserID()
+	case s3bucketcors.FieldCorsConfig:
+		return m.CorsConfig()
+	case s3bucketcors.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3bucketcors.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3BucketCORSMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3bucketcors.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3bucketcors.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3bucketcors.FieldCorsConfig:
+		return m.OldCorsConfig(ctx)
+	case s3bucketcors.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3bucketcors.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3BucketCORS field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketCORSMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3bucketcors.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3bucketcors.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3bucketcors.FieldCorsConfig:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorsConfig(v)
+		return nil
+	case s3bucketcors.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3bucketcors.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketCORS field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3BucketCORSMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3BucketCORSMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketCORSMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3BucketCORS numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3BucketCORSMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3BucketCORSMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3BucketCORSMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown S3BucketCORS nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3BucketCORSMutation) ResetField(name string) error {
+	switch name {
+	case s3bucketcors.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3bucketcors.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3bucketcors.FieldCorsConfig:
+		m.ResetCorsConfig()
+		return nil
+	case s3bucketcors.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3bucketcors.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketCORS field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3BucketCORSMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3BucketCORSMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3BucketCORSMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3BucketCORSMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3BucketCORSMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3BucketCORSMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3BucketCORSMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketCORS unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3BucketCORSMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketCORS edge %s", name)
+}
+
+// S3BucketLifecycleMutation represents an operation that mutates the S3BucketLifecycle nodes in the graph.
+type S3BucketLifecycleMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int
+	bucket_name    *string
+	user_id        *string
+	lifecycle_json *string
+	created_at     *time.Time
+	updated_at     *time.Time
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*S3BucketLifecycle, error)
+	predicates     []predicate.S3BucketLifecycle
+}
+
+var _ ent.Mutation = (*S3BucketLifecycleMutation)(nil)
+
+// s3bucketlifecycleOption allows management of the mutation configuration using functional options.
+type s3bucketlifecycleOption func(*S3BucketLifecycleMutation)
+
+// newS3BucketLifecycleMutation creates new mutation for the S3BucketLifecycle entity.
+func newS3BucketLifecycleMutation(c config, op Op, opts ...s3bucketlifecycleOption) *S3BucketLifecycleMutation {
+	m := &S3BucketLifecycleMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3BucketLifecycle,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3BucketLifecycleID sets the ID field of the mutation.
+func withS3BucketLifecycleID(id int) s3bucketlifecycleOption {
+	return func(m *S3BucketLifecycleMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3BucketLifecycle
+		)
+		m.oldValue = func(ctx context.Context) (*S3BucketLifecycle, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3BucketLifecycle.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3BucketLifecycle sets the old S3BucketLifecycle of the mutation.
+func withS3BucketLifecycle(node *S3BucketLifecycle) s3bucketlifecycleOption {
+	return func(m *S3BucketLifecycleMutation) {
+		m.oldValue = func(context.Context) (*S3BucketLifecycle, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3BucketLifecycleMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3BucketLifecycleMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3BucketLifecycleMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3BucketLifecycleMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3BucketLifecycle.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3BucketLifecycleMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3BucketLifecycleMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3BucketLifecycle entity.
+// If the S3BucketLifecycle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketLifecycleMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3BucketLifecycleMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3BucketLifecycleMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3BucketLifecycleMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3BucketLifecycle entity.
+// If the S3BucketLifecycle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketLifecycleMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3BucketLifecycleMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetLifecycleJSON sets the "lifecycle_json" field.
+func (m *S3BucketLifecycleMutation) SetLifecycleJSON(s string) {
+	m.lifecycle_json = &s
+}
+
+// LifecycleJSON returns the value of the "lifecycle_json" field in the mutation.
+func (m *S3BucketLifecycleMutation) LifecycleJSON() (r string, exists bool) {
+	v := m.lifecycle_json
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLifecycleJSON returns the old "lifecycle_json" field's value of the S3BucketLifecycle entity.
+// If the S3BucketLifecycle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketLifecycleMutation) OldLifecycleJSON(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLifecycleJSON is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLifecycleJSON requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLifecycleJSON: %w", err)
+	}
+	return oldValue.LifecycleJSON, nil
+}
+
+// ResetLifecycleJSON resets all changes to the "lifecycle_json" field.
+func (m *S3BucketLifecycleMutation) ResetLifecycleJSON() {
+	m.lifecycle_json = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3BucketLifecycleMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3BucketLifecycleMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3BucketLifecycle entity.
+// If the S3BucketLifecycle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketLifecycleMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3BucketLifecycleMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3BucketLifecycleMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3BucketLifecycleMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3BucketLifecycle entity.
+// If the S3BucketLifecycle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketLifecycleMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3BucketLifecycleMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3BucketLifecycleMutation builder.
+func (m *S3BucketLifecycleMutation) Where(ps ...predicate.S3BucketLifecycle) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3BucketLifecycleMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3BucketLifecycleMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3BucketLifecycle, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3BucketLifecycleMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3BucketLifecycleMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3BucketLifecycle).
+func (m *S3BucketLifecycleMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3BucketLifecycleMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.bucket_name != nil {
+		fields = append(fields, s3bucketlifecycle.FieldBucketName)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3bucketlifecycle.FieldUserID)
+	}
+	if m.lifecycle_json != nil {
+		fields = append(fields, s3bucketlifecycle.FieldLifecycleJSON)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3bucketlifecycle.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3bucketlifecycle.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3BucketLifecycleMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3bucketlifecycle.FieldBucketName:
+		return m.BucketName()
+	case s3bucketlifecycle.FieldUserID:
+		return m.UserID()
+	case s3bucketlifecycle.FieldLifecycleJSON:
+		return m.LifecycleJSON()
+	case s3bucketlifecycle.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3bucketlifecycle.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3BucketLifecycleMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3bucketlifecycle.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3bucketlifecycle.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3bucketlifecycle.FieldLifecycleJSON:
+		return m.OldLifecycleJSON(ctx)
+	case s3bucketlifecycle.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3bucketlifecycle.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3BucketLifecycle field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketLifecycleMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3bucketlifecycle.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3bucketlifecycle.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3bucketlifecycle.FieldLifecycleJSON:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLifecycleJSON(v)
+		return nil
+	case s3bucketlifecycle.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3bucketlifecycle.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketLifecycle field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3BucketLifecycleMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3BucketLifecycleMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketLifecycleMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3BucketLifecycle numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3BucketLifecycleMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3BucketLifecycleMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3BucketLifecycleMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown S3BucketLifecycle nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3BucketLifecycleMutation) ResetField(name string) error {
+	switch name {
+	case s3bucketlifecycle.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3bucketlifecycle.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3bucketlifecycle.FieldLifecycleJSON:
+		m.ResetLifecycleJSON()
+		return nil
+	case s3bucketlifecycle.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3bucketlifecycle.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketLifecycle field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3BucketLifecycleMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3BucketLifecycleMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3BucketLifecycleMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3BucketLifecycleMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3BucketLifecycleMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3BucketLifecycleMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3BucketLifecycleMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketLifecycle unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3BucketLifecycleMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketLifecycle edge %s", name)
+}
+
+// S3BucketPolicyMutation represents an operation that mutates the S3BucketPolicy nodes in the graph.
+type S3BucketPolicyMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	bucket_name   *string
+	user_id       *string
+	policy_json   *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*S3BucketPolicy, error)
+	predicates    []predicate.S3BucketPolicy
+}
+
+var _ ent.Mutation = (*S3BucketPolicyMutation)(nil)
+
+// s3bucketpolicyOption allows management of the mutation configuration using functional options.
+type s3bucketpolicyOption func(*S3BucketPolicyMutation)
+
+// newS3BucketPolicyMutation creates new mutation for the S3BucketPolicy entity.
+func newS3BucketPolicyMutation(c config, op Op, opts ...s3bucketpolicyOption) *S3BucketPolicyMutation {
+	m := &S3BucketPolicyMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3BucketPolicy,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3BucketPolicyID sets the ID field of the mutation.
+func withS3BucketPolicyID(id int) s3bucketpolicyOption {
+	return func(m *S3BucketPolicyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3BucketPolicy
+		)
+		m.oldValue = func(ctx context.Context) (*S3BucketPolicy, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3BucketPolicy.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3BucketPolicy sets the old S3BucketPolicy of the mutation.
+func withS3BucketPolicy(node *S3BucketPolicy) s3bucketpolicyOption {
+	return func(m *S3BucketPolicyMutation) {
+		m.oldValue = func(context.Context) (*S3BucketPolicy, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3BucketPolicyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3BucketPolicyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3BucketPolicyMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3BucketPolicyMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3BucketPolicy.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3BucketPolicyMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3BucketPolicyMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3BucketPolicy entity.
+// If the S3BucketPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketPolicyMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3BucketPolicyMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3BucketPolicyMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3BucketPolicyMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3BucketPolicy entity.
+// If the S3BucketPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketPolicyMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3BucketPolicyMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetPolicyJSON sets the "policy_json" field.
+func (m *S3BucketPolicyMutation) SetPolicyJSON(s string) {
+	m.policy_json = &s
+}
+
+// PolicyJSON returns the value of the "policy_json" field in the mutation.
+func (m *S3BucketPolicyMutation) PolicyJSON() (r string, exists bool) {
+	v := m.policy_json
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPolicyJSON returns the old "policy_json" field's value of the S3BucketPolicy entity.
+// If the S3BucketPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketPolicyMutation) OldPolicyJSON(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPolicyJSON is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPolicyJSON requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPolicyJSON: %w", err)
+	}
+	return oldValue.PolicyJSON, nil
+}
+
+// ResetPolicyJSON resets all changes to the "policy_json" field.
+func (m *S3BucketPolicyMutation) ResetPolicyJSON() {
+	m.policy_json = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3BucketPolicyMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3BucketPolicyMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3BucketPolicy entity.
+// If the S3BucketPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketPolicyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3BucketPolicyMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3BucketPolicyMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3BucketPolicyMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3BucketPolicy entity.
+// If the S3BucketPolicy object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3BucketPolicyMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3BucketPolicyMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3BucketPolicyMutation builder.
+func (m *S3BucketPolicyMutation) Where(ps ...predicate.S3BucketPolicy) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3BucketPolicyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3BucketPolicyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3BucketPolicy, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3BucketPolicyMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3BucketPolicyMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3BucketPolicy).
+func (m *S3BucketPolicyMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3BucketPolicyMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.bucket_name != nil {
+		fields = append(fields, s3bucketpolicy.FieldBucketName)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3bucketpolicy.FieldUserID)
+	}
+	if m.policy_json != nil {
+		fields = append(fields, s3bucketpolicy.FieldPolicyJSON)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3bucketpolicy.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3bucketpolicy.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3BucketPolicyMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3bucketpolicy.FieldBucketName:
+		return m.BucketName()
+	case s3bucketpolicy.FieldUserID:
+		return m.UserID()
+	case s3bucketpolicy.FieldPolicyJSON:
+		return m.PolicyJSON()
+	case s3bucketpolicy.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3bucketpolicy.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3BucketPolicyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3bucketpolicy.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3bucketpolicy.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3bucketpolicy.FieldPolicyJSON:
+		return m.OldPolicyJSON(ctx)
+	case s3bucketpolicy.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3bucketpolicy.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3BucketPolicy field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketPolicyMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3bucketpolicy.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3bucketpolicy.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3bucketpolicy.FieldPolicyJSON:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPolicyJSON(v)
+		return nil
+	case s3bucketpolicy.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3bucketpolicy.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketPolicy field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3BucketPolicyMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3BucketPolicyMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3BucketPolicyMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3BucketPolicy numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3BucketPolicyMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3BucketPolicyMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3BucketPolicyMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown S3BucketPolicy nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3BucketPolicyMutation) ResetField(name string) error {
+	switch name {
+	case s3bucketpolicy.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3bucketpolicy.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3bucketpolicy.FieldPolicyJSON:
+		m.ResetPolicyJSON()
+		return nil
+	case s3bucketpolicy.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3bucketpolicy.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3BucketPolicy field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3BucketPolicyMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3BucketPolicyMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3BucketPolicyMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3BucketPolicyMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3BucketPolicyMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3BucketPolicyMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3BucketPolicyMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketPolicy unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3BucketPolicyMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3BucketPolicy edge %s", name)
+}
+
+// S3EncryptionKeyMutation represents an operation that mutates the S3EncryptionKey nodes in the graph.
+type S3EncryptionKeyMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	key_id        *string
+	key_data      *string
+	algorithm     *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*S3EncryptionKey, error)
+	predicates    []predicate.S3EncryptionKey
+}
+
+var _ ent.Mutation = (*S3EncryptionKeyMutation)(nil)
+
+// s3encryptionkeyOption allows management of the mutation configuration using functional options.
+type s3encryptionkeyOption func(*S3EncryptionKeyMutation)
+
+// newS3EncryptionKeyMutation creates new mutation for the S3EncryptionKey entity.
+func newS3EncryptionKeyMutation(c config, op Op, opts ...s3encryptionkeyOption) *S3EncryptionKeyMutation {
+	m := &S3EncryptionKeyMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3EncryptionKey,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3EncryptionKeyID sets the ID field of the mutation.
+func withS3EncryptionKeyID(id int) s3encryptionkeyOption {
+	return func(m *S3EncryptionKeyMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3EncryptionKey
+		)
+		m.oldValue = func(ctx context.Context) (*S3EncryptionKey, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3EncryptionKey.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3EncryptionKey sets the old S3EncryptionKey of the mutation.
+func withS3EncryptionKey(node *S3EncryptionKey) s3encryptionkeyOption {
+	return func(m *S3EncryptionKeyMutation) {
+		m.oldValue = func(context.Context) (*S3EncryptionKey, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3EncryptionKeyMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3EncryptionKeyMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3EncryptionKeyMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3EncryptionKeyMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3EncryptionKey.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetKeyID sets the "key_id" field.
+func (m *S3EncryptionKeyMutation) SetKeyID(s string) {
+	m.key_id = &s
+}
+
+// KeyID returns the value of the "key_id" field in the mutation.
+func (m *S3EncryptionKeyMutation) KeyID() (r string, exists bool) {
+	v := m.key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyID returns the old "key_id" field's value of the S3EncryptionKey entity.
+// If the S3EncryptionKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3EncryptionKeyMutation) OldKeyID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyID: %w", err)
+	}
+	return oldValue.KeyID, nil
+}
+
+// ResetKeyID resets all changes to the "key_id" field.
+func (m *S3EncryptionKeyMutation) ResetKeyID() {
+	m.key_id = nil
+}
+
+// SetKeyData sets the "key_data" field.
+func (m *S3EncryptionKeyMutation) SetKeyData(s string) {
+	m.key_data = &s
+}
+
+// KeyData returns the value of the "key_data" field in the mutation.
+func (m *S3EncryptionKeyMutation) KeyData() (r string, exists bool) {
+	v := m.key_data
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyData returns the old "key_data" field's value of the S3EncryptionKey entity.
+// If the S3EncryptionKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3EncryptionKeyMutation) OldKeyData(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyData is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyData requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyData: %w", err)
+	}
+	return oldValue.KeyData, nil
+}
+
+// ResetKeyData resets all changes to the "key_data" field.
+func (m *S3EncryptionKeyMutation) ResetKeyData() {
+	m.key_data = nil
+}
+
+// SetAlgorithm sets the "algorithm" field.
+func (m *S3EncryptionKeyMutation) SetAlgorithm(s string) {
+	m.algorithm = &s
+}
+
+// Algorithm returns the value of the "algorithm" field in the mutation.
+func (m *S3EncryptionKeyMutation) Algorithm() (r string, exists bool) {
+	v := m.algorithm
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAlgorithm returns the old "algorithm" field's value of the S3EncryptionKey entity.
+// If the S3EncryptionKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3EncryptionKeyMutation) OldAlgorithm(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAlgorithm is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAlgorithm requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAlgorithm: %w", err)
+	}
+	return oldValue.Algorithm, nil
+}
+
+// ResetAlgorithm resets all changes to the "algorithm" field.
+func (m *S3EncryptionKeyMutation) ResetAlgorithm() {
+	m.algorithm = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3EncryptionKeyMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3EncryptionKeyMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3EncryptionKey entity.
+// If the S3EncryptionKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3EncryptionKeyMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3EncryptionKeyMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3EncryptionKeyMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3EncryptionKeyMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3EncryptionKey entity.
+// If the S3EncryptionKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3EncryptionKeyMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3EncryptionKeyMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3EncryptionKeyMutation builder.
+func (m *S3EncryptionKeyMutation) Where(ps ...predicate.S3EncryptionKey) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3EncryptionKeyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3EncryptionKeyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3EncryptionKey, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3EncryptionKeyMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3EncryptionKeyMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3EncryptionKey).
+func (m *S3EncryptionKeyMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3EncryptionKeyMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.key_id != nil {
+		fields = append(fields, s3encryptionkey.FieldKeyID)
+	}
+	if m.key_data != nil {
+		fields = append(fields, s3encryptionkey.FieldKeyData)
+	}
+	if m.algorithm != nil {
+		fields = append(fields, s3encryptionkey.FieldAlgorithm)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3encryptionkey.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3encryptionkey.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3EncryptionKeyMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3encryptionkey.FieldKeyID:
+		return m.KeyID()
+	case s3encryptionkey.FieldKeyData:
+		return m.KeyData()
+	case s3encryptionkey.FieldAlgorithm:
+		return m.Algorithm()
+	case s3encryptionkey.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3encryptionkey.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3EncryptionKeyMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3encryptionkey.FieldKeyID:
+		return m.OldKeyID(ctx)
+	case s3encryptionkey.FieldKeyData:
+		return m.OldKeyData(ctx)
+	case s3encryptionkey.FieldAlgorithm:
+		return m.OldAlgorithm(ctx)
+	case s3encryptionkey.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3encryptionkey.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3EncryptionKey field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3EncryptionKeyMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3encryptionkey.FieldKeyID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyID(v)
+		return nil
+	case s3encryptionkey.FieldKeyData:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyData(v)
+		return nil
+	case s3encryptionkey.FieldAlgorithm:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlgorithm(v)
+		return nil
+	case s3encryptionkey.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3encryptionkey.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3EncryptionKey field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3EncryptionKeyMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3EncryptionKeyMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3EncryptionKeyMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3EncryptionKey numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3EncryptionKeyMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3EncryptionKeyMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3EncryptionKeyMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown S3EncryptionKey nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3EncryptionKeyMutation) ResetField(name string) error {
+	switch name {
+	case s3encryptionkey.FieldKeyID:
+		m.ResetKeyID()
+		return nil
+	case s3encryptionkey.FieldKeyData:
+		m.ResetKeyData()
+		return nil
+	case s3encryptionkey.FieldAlgorithm:
+		m.ResetAlgorithm()
+		return nil
+	case s3encryptionkey.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3encryptionkey.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3EncryptionKey field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3EncryptionKeyMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3EncryptionKeyMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3EncryptionKeyMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3EncryptionKeyMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3EncryptionKeyMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3EncryptionKeyMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3EncryptionKeyMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3EncryptionKey unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3EncryptionKeyMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3EncryptionKey edge %s", name)
+}
+
+// S3MultipartPartMutation represents an operation that mutates the S3MultipartPart nodes in the graph.
+type S3MultipartPartMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int
+	upload_id      *string
+	part_number    *int
+	addpart_number *int
+	etag           *string
+	size           *int64
+	addsize        *int64
+	chunk_path     *string
+	created_at     *time.Time
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*S3MultipartPart, error)
+	predicates     []predicate.S3MultipartPart
+}
+
+var _ ent.Mutation = (*S3MultipartPartMutation)(nil)
+
+// s3multipartpartOption allows management of the mutation configuration using functional options.
+type s3multipartpartOption func(*S3MultipartPartMutation)
+
+// newS3MultipartPartMutation creates new mutation for the S3MultipartPart entity.
+func newS3MultipartPartMutation(c config, op Op, opts ...s3multipartpartOption) *S3MultipartPartMutation {
+	m := &S3MultipartPartMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3MultipartPart,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3MultipartPartID sets the ID field of the mutation.
+func withS3MultipartPartID(id int) s3multipartpartOption {
+	return func(m *S3MultipartPartMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3MultipartPart
+		)
+		m.oldValue = func(ctx context.Context) (*S3MultipartPart, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3MultipartPart.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3MultipartPart sets the old S3MultipartPart of the mutation.
+func withS3MultipartPart(node *S3MultipartPart) s3multipartpartOption {
+	return func(m *S3MultipartPartMutation) {
+		m.oldValue = func(context.Context) (*S3MultipartPart, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3MultipartPartMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3MultipartPartMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3MultipartPartMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3MultipartPartMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3MultipartPart.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUploadID sets the "upload_id" field.
+func (m *S3MultipartPartMutation) SetUploadID(s string) {
+	m.upload_id = &s
+}
+
+// UploadID returns the value of the "upload_id" field in the mutation.
+func (m *S3MultipartPartMutation) UploadID() (r string, exists bool) {
+	v := m.upload_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUploadID returns the old "upload_id" field's value of the S3MultipartPart entity.
+// If the S3MultipartPart object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartPartMutation) OldUploadID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUploadID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUploadID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUploadID: %w", err)
+	}
+	return oldValue.UploadID, nil
+}
+
+// ResetUploadID resets all changes to the "upload_id" field.
+func (m *S3MultipartPartMutation) ResetUploadID() {
+	m.upload_id = nil
+}
+
+// SetPartNumber sets the "part_number" field.
+func (m *S3MultipartPartMutation) SetPartNumber(i int) {
+	m.part_number = &i
+	m.addpart_number = nil
+}
+
+// PartNumber returns the value of the "part_number" field in the mutation.
+func (m *S3MultipartPartMutation) PartNumber() (r int, exists bool) {
+	v := m.part_number
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPartNumber returns the old "part_number" field's value of the S3MultipartPart entity.
+// If the S3MultipartPart object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartPartMutation) OldPartNumber(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPartNumber is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPartNumber requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPartNumber: %w", err)
+	}
+	return oldValue.PartNumber, nil
+}
+
+// AddPartNumber adds i to the "part_number" field.
+func (m *S3MultipartPartMutation) AddPartNumber(i int) {
+	if m.addpart_number != nil {
+		*m.addpart_number += i
+	} else {
+		m.addpart_number = &i
+	}
+}
+
+// AddedPartNumber returns the value that was added to the "part_number" field in this mutation.
+func (m *S3MultipartPartMutation) AddedPartNumber() (r int, exists bool) {
+	v := m.addpart_number
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPartNumber resets all changes to the "part_number" field.
+func (m *S3MultipartPartMutation) ResetPartNumber() {
+	m.part_number = nil
+	m.addpart_number = nil
+}
+
+// SetEtag sets the "etag" field.
+func (m *S3MultipartPartMutation) SetEtag(s string) {
+	m.etag = &s
+}
+
+// Etag returns the value of the "etag" field in the mutation.
+func (m *S3MultipartPartMutation) Etag() (r string, exists bool) {
+	v := m.etag
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEtag returns the old "etag" field's value of the S3MultipartPart entity.
+// If the S3MultipartPart object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartPartMutation) OldEtag(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEtag is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEtag requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEtag: %w", err)
+	}
+	return oldValue.Etag, nil
+}
+
+// ResetEtag resets all changes to the "etag" field.
+func (m *S3MultipartPartMutation) ResetEtag() {
+	m.etag = nil
+}
+
+// SetSize sets the "size" field.
+func (m *S3MultipartPartMutation) SetSize(i int64) {
+	m.size = &i
+	m.addsize = nil
+}
+
+// Size returns the value of the "size" field in the mutation.
+func (m *S3MultipartPartMutation) Size() (r int64, exists bool) {
+	v := m.size
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSize returns the old "size" field's value of the S3MultipartPart entity.
+// If the S3MultipartPart object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartPartMutation) OldSize(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSize is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSize requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSize: %w", err)
+	}
+	return oldValue.Size, nil
+}
+
+// AddSize adds i to the "size" field.
+func (m *S3MultipartPartMutation) AddSize(i int64) {
+	if m.addsize != nil {
+		*m.addsize += i
+	} else {
+		m.addsize = &i
+	}
+}
+
+// AddedSize returns the value that was added to the "size" field in this mutation.
+func (m *S3MultipartPartMutation) AddedSize() (r int64, exists bool) {
+	v := m.addsize
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSize resets all changes to the "size" field.
+func (m *S3MultipartPartMutation) ResetSize() {
+	m.size = nil
+	m.addsize = nil
+}
+
+// SetChunkPath sets the "chunk_path" field.
+func (m *S3MultipartPartMutation) SetChunkPath(s string) {
+	m.chunk_path = &s
+}
+
+// ChunkPath returns the value of the "chunk_path" field in the mutation.
+func (m *S3MultipartPartMutation) ChunkPath() (r string, exists bool) {
+	v := m.chunk_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChunkPath returns the old "chunk_path" field's value of the S3MultipartPart entity.
+// If the S3MultipartPart object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartPartMutation) OldChunkPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChunkPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChunkPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChunkPath: %w", err)
+	}
+	return oldValue.ChunkPath, nil
+}
+
+// ClearChunkPath clears the value of the "chunk_path" field.
+func (m *S3MultipartPartMutation) ClearChunkPath() {
+	m.chunk_path = nil
+	m.clearedFields[s3multipartpart.FieldChunkPath] = struct{}{}
+}
+
+// ChunkPathCleared returns if the "chunk_path" field was cleared in this mutation.
+func (m *S3MultipartPartMutation) ChunkPathCleared() bool {
+	_, ok := m.clearedFields[s3multipartpart.FieldChunkPath]
+	return ok
+}
+
+// ResetChunkPath resets all changes to the "chunk_path" field.
+func (m *S3MultipartPartMutation) ResetChunkPath() {
+	m.chunk_path = nil
+	delete(m.clearedFields, s3multipartpart.FieldChunkPath)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3MultipartPartMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3MultipartPartMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3MultipartPart entity.
+// If the S3MultipartPart object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartPartMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3MultipartPartMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the S3MultipartPartMutation builder.
+func (m *S3MultipartPartMutation) Where(ps ...predicate.S3MultipartPart) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3MultipartPartMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3MultipartPartMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3MultipartPart, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3MultipartPartMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3MultipartPartMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3MultipartPart).
+func (m *S3MultipartPartMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3MultipartPartMutation) Fields() []string {
+	fields := make([]string, 0, 6)
+	if m.upload_id != nil {
+		fields = append(fields, s3multipartpart.FieldUploadID)
+	}
+	if m.part_number != nil {
+		fields = append(fields, s3multipartpart.FieldPartNumber)
+	}
+	if m.etag != nil {
+		fields = append(fields, s3multipartpart.FieldEtag)
+	}
+	if m.size != nil {
+		fields = append(fields, s3multipartpart.FieldSize)
+	}
+	if m.chunk_path != nil {
+		fields = append(fields, s3multipartpart.FieldChunkPath)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3multipartpart.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3MultipartPartMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3multipartpart.FieldUploadID:
+		return m.UploadID()
+	case s3multipartpart.FieldPartNumber:
+		return m.PartNumber()
+	case s3multipartpart.FieldEtag:
+		return m.Etag()
+	case s3multipartpart.FieldSize:
+		return m.Size()
+	case s3multipartpart.FieldChunkPath:
+		return m.ChunkPath()
+	case s3multipartpart.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3MultipartPartMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3multipartpart.FieldUploadID:
+		return m.OldUploadID(ctx)
+	case s3multipartpart.FieldPartNumber:
+		return m.OldPartNumber(ctx)
+	case s3multipartpart.FieldEtag:
+		return m.OldEtag(ctx)
+	case s3multipartpart.FieldSize:
+		return m.OldSize(ctx)
+	case s3multipartpart.FieldChunkPath:
+		return m.OldChunkPath(ctx)
+	case s3multipartpart.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3MultipartPart field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3MultipartPartMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3multipartpart.FieldUploadID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUploadID(v)
+		return nil
+	case s3multipartpart.FieldPartNumber:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPartNumber(v)
+		return nil
+	case s3multipartpart.FieldEtag:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEtag(v)
+		return nil
+	case s3multipartpart.FieldSize:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSize(v)
+		return nil
+	case s3multipartpart.FieldChunkPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChunkPath(v)
+		return nil
+	case s3multipartpart.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartPart field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3MultipartPartMutation) AddedFields() []string {
+	var fields []string
+	if m.addpart_number != nil {
+		fields = append(fields, s3multipartpart.FieldPartNumber)
+	}
+	if m.addsize != nil {
+		fields = append(fields, s3multipartpart.FieldSize)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3MultipartPartMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case s3multipartpart.FieldPartNumber:
+		return m.AddedPartNumber()
+	case s3multipartpart.FieldSize:
+		return m.AddedSize()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3MultipartPartMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case s3multipartpart.FieldPartNumber:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPartNumber(v)
+		return nil
+	case s3multipartpart.FieldSize:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSize(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartPart numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3MultipartPartMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(s3multipartpart.FieldChunkPath) {
+		fields = append(fields, s3multipartpart.FieldChunkPath)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3MultipartPartMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3MultipartPartMutation) ClearField(name string) error {
+	switch name {
+	case s3multipartpart.FieldChunkPath:
+		m.ClearChunkPath()
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartPart nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3MultipartPartMutation) ResetField(name string) error {
+	switch name {
+	case s3multipartpart.FieldUploadID:
+		m.ResetUploadID()
+		return nil
+	case s3multipartpart.FieldPartNumber:
+		m.ResetPartNumber()
+		return nil
+	case s3multipartpart.FieldEtag:
+		m.ResetEtag()
+		return nil
+	case s3multipartpart.FieldSize:
+		m.ResetSize()
+		return nil
+	case s3multipartpart.FieldChunkPath:
+		m.ResetChunkPath()
+		return nil
+	case s3multipartpart.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartPart field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3MultipartPartMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3MultipartPartMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3MultipartPartMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3MultipartPartMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3MultipartPartMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3MultipartPartMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3MultipartPartMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3MultipartPart unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3MultipartPartMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3MultipartPart edge %s", name)
+}
+
+// S3MultipartUploadMutation represents an operation that mutates the S3MultipartUpload nodes in the graph.
+type S3MultipartUploadMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	upload_id     *string
+	bucket_name   *string
+	object_key    *string
+	user_id       *string
+	metadata      *string
+	status        *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*S3MultipartUpload, error)
+	predicates    []predicate.S3MultipartUpload
+}
+
+var _ ent.Mutation = (*S3MultipartUploadMutation)(nil)
+
+// s3multipartuploadOption allows management of the mutation configuration using functional options.
+type s3multipartuploadOption func(*S3MultipartUploadMutation)
+
+// newS3MultipartUploadMutation creates new mutation for the S3MultipartUpload entity.
+func newS3MultipartUploadMutation(c config, op Op, opts ...s3multipartuploadOption) *S3MultipartUploadMutation {
+	m := &S3MultipartUploadMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3MultipartUpload,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3MultipartUploadID sets the ID field of the mutation.
+func withS3MultipartUploadID(id int) s3multipartuploadOption {
+	return func(m *S3MultipartUploadMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3MultipartUpload
+		)
+		m.oldValue = func(ctx context.Context) (*S3MultipartUpload, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3MultipartUpload.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3MultipartUpload sets the old S3MultipartUpload of the mutation.
+func withS3MultipartUpload(node *S3MultipartUpload) s3multipartuploadOption {
+	return func(m *S3MultipartUploadMutation) {
+		m.oldValue = func(context.Context) (*S3MultipartUpload, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3MultipartUploadMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3MultipartUploadMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3MultipartUploadMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3MultipartUploadMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3MultipartUpload.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetUploadID sets the "upload_id" field.
+func (m *S3MultipartUploadMutation) SetUploadID(s string) {
+	m.upload_id = &s
+}
+
+// UploadID returns the value of the "upload_id" field in the mutation.
+func (m *S3MultipartUploadMutation) UploadID() (r string, exists bool) {
+	v := m.upload_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUploadID returns the old "upload_id" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldUploadID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUploadID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUploadID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUploadID: %w", err)
+	}
+	return oldValue.UploadID, nil
+}
+
+// ResetUploadID resets all changes to the "upload_id" field.
+func (m *S3MultipartUploadMutation) ResetUploadID() {
+	m.upload_id = nil
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3MultipartUploadMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3MultipartUploadMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3MultipartUploadMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetObjectKey sets the "object_key" field.
+func (m *S3MultipartUploadMutation) SetObjectKey(s string) {
+	m.object_key = &s
+}
+
+// ObjectKey returns the value of the "object_key" field in the mutation.
+func (m *S3MultipartUploadMutation) ObjectKey() (r string, exists bool) {
+	v := m.object_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObjectKey returns the old "object_key" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldObjectKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObjectKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObjectKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObjectKey: %w", err)
+	}
+	return oldValue.ObjectKey, nil
+}
+
+// ResetObjectKey resets all changes to the "object_key" field.
+func (m *S3MultipartUploadMutation) ResetObjectKey() {
+	m.object_key = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3MultipartUploadMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3MultipartUploadMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3MultipartUploadMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetMetadata sets the "metadata" field.
+func (m *S3MultipartUploadMutation) SetMetadata(s string) {
+	m.metadata = &s
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *S3MultipartUploadMutation) Metadata() (r string, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldMetadata(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (m *S3MultipartUploadMutation) ClearMetadata() {
+	m.metadata = nil
+	m.clearedFields[s3multipartupload.FieldMetadata] = struct{}{}
+}
+
+// MetadataCleared returns if the "metadata" field was cleared in this mutation.
+func (m *S3MultipartUploadMutation) MetadataCleared() bool {
+	_, ok := m.clearedFields[s3multipartupload.FieldMetadata]
+	return ok
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *S3MultipartUploadMutation) ResetMetadata() {
+	m.metadata = nil
+	delete(m.clearedFields, s3multipartupload.FieldMetadata)
+}
+
+// SetStatus sets the "status" field.
+func (m *S3MultipartUploadMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *S3MultipartUploadMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *S3MultipartUploadMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3MultipartUploadMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3MultipartUploadMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3MultipartUploadMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3MultipartUploadMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3MultipartUploadMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3MultipartUpload entity.
+// If the S3MultipartUpload object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3MultipartUploadMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3MultipartUploadMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3MultipartUploadMutation builder.
+func (m *S3MultipartUploadMutation) Where(ps ...predicate.S3MultipartUpload) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3MultipartUploadMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3MultipartUploadMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3MultipartUpload, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3MultipartUploadMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3MultipartUploadMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3MultipartUpload).
+func (m *S3MultipartUploadMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3MultipartUploadMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.upload_id != nil {
+		fields = append(fields, s3multipartupload.FieldUploadID)
+	}
+	if m.bucket_name != nil {
+		fields = append(fields, s3multipartupload.FieldBucketName)
+	}
+	if m.object_key != nil {
+		fields = append(fields, s3multipartupload.FieldObjectKey)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3multipartupload.FieldUserID)
+	}
+	if m.metadata != nil {
+		fields = append(fields, s3multipartupload.FieldMetadata)
+	}
+	if m.status != nil {
+		fields = append(fields, s3multipartupload.FieldStatus)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3multipartupload.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3multipartupload.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3MultipartUploadMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3multipartupload.FieldUploadID:
+		return m.UploadID()
+	case s3multipartupload.FieldBucketName:
+		return m.BucketName()
+	case s3multipartupload.FieldObjectKey:
+		return m.ObjectKey()
+	case s3multipartupload.FieldUserID:
+		return m.UserID()
+	case s3multipartupload.FieldMetadata:
+		return m.Metadata()
+	case s3multipartupload.FieldStatus:
+		return m.Status()
+	case s3multipartupload.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3multipartupload.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3MultipartUploadMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3multipartupload.FieldUploadID:
+		return m.OldUploadID(ctx)
+	case s3multipartupload.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3multipartupload.FieldObjectKey:
+		return m.OldObjectKey(ctx)
+	case s3multipartupload.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3multipartupload.FieldMetadata:
+		return m.OldMetadata(ctx)
+	case s3multipartupload.FieldStatus:
+		return m.OldStatus(ctx)
+	case s3multipartupload.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3multipartupload.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3MultipartUpload field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3MultipartUploadMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3multipartupload.FieldUploadID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUploadID(v)
+		return nil
+	case s3multipartupload.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3multipartupload.FieldObjectKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObjectKey(v)
+		return nil
+	case s3multipartupload.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3multipartupload.FieldMetadata:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
+		return nil
+	case s3multipartupload.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case s3multipartupload.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3multipartupload.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartUpload field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3MultipartUploadMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3MultipartUploadMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3MultipartUploadMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3MultipartUpload numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3MultipartUploadMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(s3multipartupload.FieldMetadata) {
+		fields = append(fields, s3multipartupload.FieldMetadata)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3MultipartUploadMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3MultipartUploadMutation) ClearField(name string) error {
+	switch name {
+	case s3multipartupload.FieldMetadata:
+		m.ClearMetadata()
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartUpload nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3MultipartUploadMutation) ResetField(name string) error {
+	switch name {
+	case s3multipartupload.FieldUploadID:
+		m.ResetUploadID()
+		return nil
+	case s3multipartupload.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3multipartupload.FieldObjectKey:
+		m.ResetObjectKey()
+		return nil
+	case s3multipartupload.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3multipartupload.FieldMetadata:
+		m.ResetMetadata()
+		return nil
+	case s3multipartupload.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case s3multipartupload.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3multipartupload.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3MultipartUpload field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3MultipartUploadMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3MultipartUploadMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3MultipartUploadMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3MultipartUploadMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3MultipartUploadMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3MultipartUploadMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3MultipartUploadMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3MultipartUpload unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3MultipartUploadMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3MultipartUpload edge %s", name)
+}
+
+// S3ObjectMutation represents an operation that mutates the S3Object nodes in the graph.
+type S3ObjectMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	file_id          *string
+	bucket_name      *string
+	object_key       *string
+	user_id          *string
+	etag             *string
+	storage_class    *string
+	content_type     *string
+	user_metadata    *string
+	tags             *string
+	version_id       *string
+	is_latest        *bool
+	is_delete_marker *bool
+	created_at       *time.Time
+	updated_at       *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*S3Object, error)
+	predicates       []predicate.S3Object
+}
+
+var _ ent.Mutation = (*S3ObjectMutation)(nil)
+
+// s3objectOption allows management of the mutation configuration using functional options.
+type s3objectOption func(*S3ObjectMutation)
+
+// newS3ObjectMutation creates new mutation for the S3Object entity.
+func newS3ObjectMutation(c config, op Op, opts ...s3objectOption) *S3ObjectMutation {
+	m := &S3ObjectMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3Object,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3ObjectID sets the ID field of the mutation.
+func withS3ObjectID(id int) s3objectOption {
+	return func(m *S3ObjectMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3Object
+		)
+		m.oldValue = func(ctx context.Context) (*S3Object, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3Object.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3Object sets the old S3Object of the mutation.
+func withS3Object(node *S3Object) s3objectOption {
+	return func(m *S3ObjectMutation) {
+		m.oldValue = func(context.Context) (*S3Object, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3ObjectMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3ObjectMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3ObjectMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3ObjectMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3Object.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetFileID sets the "file_id" field.
+func (m *S3ObjectMutation) SetFileID(s string) {
+	m.file_id = &s
+}
+
+// FileID returns the value of the "file_id" field in the mutation.
+func (m *S3ObjectMutation) FileID() (r string, exists bool) {
+	v := m.file_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFileID returns the old "file_id" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldFileID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFileID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFileID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFileID: %w", err)
+	}
+	return oldValue.FileID, nil
+}
+
+// ClearFileID clears the value of the "file_id" field.
+func (m *S3ObjectMutation) ClearFileID() {
+	m.file_id = nil
+	m.clearedFields[s3object.FieldFileID] = struct{}{}
+}
+
+// FileIDCleared returns if the "file_id" field was cleared in this mutation.
+func (m *S3ObjectMutation) FileIDCleared() bool {
+	_, ok := m.clearedFields[s3object.FieldFileID]
+	return ok
+}
+
+// ResetFileID resets all changes to the "file_id" field.
+func (m *S3ObjectMutation) ResetFileID() {
+	m.file_id = nil
+	delete(m.clearedFields, s3object.FieldFileID)
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3ObjectMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3ObjectMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3ObjectMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetObjectKey sets the "object_key" field.
+func (m *S3ObjectMutation) SetObjectKey(s string) {
+	m.object_key = &s
+}
+
+// ObjectKey returns the value of the "object_key" field in the mutation.
+func (m *S3ObjectMutation) ObjectKey() (r string, exists bool) {
+	v := m.object_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObjectKey returns the old "object_key" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldObjectKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObjectKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObjectKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObjectKey: %w", err)
+	}
+	return oldValue.ObjectKey, nil
+}
+
+// ResetObjectKey resets all changes to the "object_key" field.
+func (m *S3ObjectMutation) ResetObjectKey() {
+	m.object_key = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3ObjectMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3ObjectMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3ObjectMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetEtag sets the "etag" field.
+func (m *S3ObjectMutation) SetEtag(s string) {
+	m.etag = &s
+}
+
+// Etag returns the value of the "etag" field in the mutation.
+func (m *S3ObjectMutation) Etag() (r string, exists bool) {
+	v := m.etag
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEtag returns the old "etag" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldEtag(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEtag is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEtag requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEtag: %w", err)
+	}
+	return oldValue.Etag, nil
+}
+
+// ClearEtag clears the value of the "etag" field.
+func (m *S3ObjectMutation) ClearEtag() {
+	m.etag = nil
+	m.clearedFields[s3object.FieldEtag] = struct{}{}
+}
+
+// EtagCleared returns if the "etag" field was cleared in this mutation.
+func (m *S3ObjectMutation) EtagCleared() bool {
+	_, ok := m.clearedFields[s3object.FieldEtag]
+	return ok
+}
+
+// ResetEtag resets all changes to the "etag" field.
+func (m *S3ObjectMutation) ResetEtag() {
+	m.etag = nil
+	delete(m.clearedFields, s3object.FieldEtag)
+}
+
+// SetStorageClass sets the "storage_class" field.
+func (m *S3ObjectMutation) SetStorageClass(s string) {
+	m.storage_class = &s
+}
+
+// StorageClass returns the value of the "storage_class" field in the mutation.
+func (m *S3ObjectMutation) StorageClass() (r string, exists bool) {
+	v := m.storage_class
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStorageClass returns the old "storage_class" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldStorageClass(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStorageClass is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStorageClass requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStorageClass: %w", err)
+	}
+	return oldValue.StorageClass, nil
+}
+
+// ResetStorageClass resets all changes to the "storage_class" field.
+func (m *S3ObjectMutation) ResetStorageClass() {
+	m.storage_class = nil
+}
+
+// SetContentType sets the "content_type" field.
+func (m *S3ObjectMutation) SetContentType(s string) {
+	m.content_type = &s
+}
+
+// ContentType returns the value of the "content_type" field in the mutation.
+func (m *S3ObjectMutation) ContentType() (r string, exists bool) {
+	v := m.content_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContentType returns the old "content_type" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldContentType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContentType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContentType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContentType: %w", err)
+	}
+	return oldValue.ContentType, nil
+}
+
+// ClearContentType clears the value of the "content_type" field.
+func (m *S3ObjectMutation) ClearContentType() {
+	m.content_type = nil
+	m.clearedFields[s3object.FieldContentType] = struct{}{}
+}
+
+// ContentTypeCleared returns if the "content_type" field was cleared in this mutation.
+func (m *S3ObjectMutation) ContentTypeCleared() bool {
+	_, ok := m.clearedFields[s3object.FieldContentType]
+	return ok
+}
+
+// ResetContentType resets all changes to the "content_type" field.
+func (m *S3ObjectMutation) ResetContentType() {
+	m.content_type = nil
+	delete(m.clearedFields, s3object.FieldContentType)
+}
+
+// SetUserMetadata sets the "user_metadata" field.
+func (m *S3ObjectMutation) SetUserMetadata(s string) {
+	m.user_metadata = &s
+}
+
+// UserMetadata returns the value of the "user_metadata" field in the mutation.
+func (m *S3ObjectMutation) UserMetadata() (r string, exists bool) {
+	v := m.user_metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserMetadata returns the old "user_metadata" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldUserMetadata(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserMetadata: %w", err)
+	}
+	return oldValue.UserMetadata, nil
+}
+
+// ClearUserMetadata clears the value of the "user_metadata" field.
+func (m *S3ObjectMutation) ClearUserMetadata() {
+	m.user_metadata = nil
+	m.clearedFields[s3object.FieldUserMetadata] = struct{}{}
+}
+
+// UserMetadataCleared returns if the "user_metadata" field was cleared in this mutation.
+func (m *S3ObjectMutation) UserMetadataCleared() bool {
+	_, ok := m.clearedFields[s3object.FieldUserMetadata]
+	return ok
+}
+
+// ResetUserMetadata resets all changes to the "user_metadata" field.
+func (m *S3ObjectMutation) ResetUserMetadata() {
+	m.user_metadata = nil
+	delete(m.clearedFields, s3object.FieldUserMetadata)
+}
+
+// SetTags sets the "tags" field.
+func (m *S3ObjectMutation) SetTags(s string) {
+	m.tags = &s
+}
+
+// Tags returns the value of the "tags" field in the mutation.
+func (m *S3ObjectMutation) Tags() (r string, exists bool) {
+	v := m.tags
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTags returns the old "tags" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldTags(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTags is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTags requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTags: %w", err)
+	}
+	return oldValue.Tags, nil
+}
+
+// ClearTags clears the value of the "tags" field.
+func (m *S3ObjectMutation) ClearTags() {
+	m.tags = nil
+	m.clearedFields[s3object.FieldTags] = struct{}{}
+}
+
+// TagsCleared returns if the "tags" field was cleared in this mutation.
+func (m *S3ObjectMutation) TagsCleared() bool {
+	_, ok := m.clearedFields[s3object.FieldTags]
+	return ok
+}
+
+// ResetTags resets all changes to the "tags" field.
+func (m *S3ObjectMutation) ResetTags() {
+	m.tags = nil
+	delete(m.clearedFields, s3object.FieldTags)
+}
+
+// SetVersionID sets the "version_id" field.
+func (m *S3ObjectMutation) SetVersionID(s string) {
+	m.version_id = &s
+}
+
+// VersionID returns the value of the "version_id" field in the mutation.
+func (m *S3ObjectMutation) VersionID() (r string, exists bool) {
+	v := m.version_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersionID returns the old "version_id" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldVersionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersionID: %w", err)
+	}
+	return oldValue.VersionID, nil
+}
+
+// ClearVersionID clears the value of the "version_id" field.
+func (m *S3ObjectMutation) ClearVersionID() {
+	m.version_id = nil
+	m.clearedFields[s3object.FieldVersionID] = struct{}{}
+}
+
+// VersionIDCleared returns if the "version_id" field was cleared in this mutation.
+func (m *S3ObjectMutation) VersionIDCleared() bool {
+	_, ok := m.clearedFields[s3object.FieldVersionID]
+	return ok
+}
+
+// ResetVersionID resets all changes to the "version_id" field.
+func (m *S3ObjectMutation) ResetVersionID() {
+	m.version_id = nil
+	delete(m.clearedFields, s3object.FieldVersionID)
+}
+
+// SetIsLatest sets the "is_latest" field.
+func (m *S3ObjectMutation) SetIsLatest(b bool) {
+	m.is_latest = &b
+}
+
+// IsLatest returns the value of the "is_latest" field in the mutation.
+func (m *S3ObjectMutation) IsLatest() (r bool, exists bool) {
+	v := m.is_latest
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsLatest returns the old "is_latest" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldIsLatest(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsLatest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsLatest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsLatest: %w", err)
+	}
+	return oldValue.IsLatest, nil
+}
+
+// ResetIsLatest resets all changes to the "is_latest" field.
+func (m *S3ObjectMutation) ResetIsLatest() {
+	m.is_latest = nil
+}
+
+// SetIsDeleteMarker sets the "is_delete_marker" field.
+func (m *S3ObjectMutation) SetIsDeleteMarker(b bool) {
+	m.is_delete_marker = &b
+}
+
+// IsDeleteMarker returns the value of the "is_delete_marker" field in the mutation.
+func (m *S3ObjectMutation) IsDeleteMarker() (r bool, exists bool) {
+	v := m.is_delete_marker
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsDeleteMarker returns the old "is_delete_marker" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldIsDeleteMarker(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsDeleteMarker is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsDeleteMarker requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsDeleteMarker: %w", err)
+	}
+	return oldValue.IsDeleteMarker, nil
+}
+
+// ResetIsDeleteMarker resets all changes to the "is_delete_marker" field.
+func (m *S3ObjectMutation) ResetIsDeleteMarker() {
+	m.is_delete_marker = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3ObjectMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3ObjectMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3ObjectMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3ObjectMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3ObjectMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3Object entity.
+// If the S3Object object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3ObjectMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3ObjectMutation builder.
+func (m *S3ObjectMutation) Where(ps ...predicate.S3Object) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3ObjectMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3ObjectMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3Object, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3ObjectMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3ObjectMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3Object).
+func (m *S3ObjectMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3ObjectMutation) Fields() []string {
+	fields := make([]string, 0, 14)
+	if m.file_id != nil {
+		fields = append(fields, s3object.FieldFileID)
+	}
+	if m.bucket_name != nil {
+		fields = append(fields, s3object.FieldBucketName)
+	}
+	if m.object_key != nil {
+		fields = append(fields, s3object.FieldObjectKey)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3object.FieldUserID)
+	}
+	if m.etag != nil {
+		fields = append(fields, s3object.FieldEtag)
+	}
+	if m.storage_class != nil {
+		fields = append(fields, s3object.FieldStorageClass)
+	}
+	if m.content_type != nil {
+		fields = append(fields, s3object.FieldContentType)
+	}
+	if m.user_metadata != nil {
+		fields = append(fields, s3object.FieldUserMetadata)
+	}
+	if m.tags != nil {
+		fields = append(fields, s3object.FieldTags)
+	}
+	if m.version_id != nil {
+		fields = append(fields, s3object.FieldVersionID)
+	}
+	if m.is_latest != nil {
+		fields = append(fields, s3object.FieldIsLatest)
+	}
+	if m.is_delete_marker != nil {
+		fields = append(fields, s3object.FieldIsDeleteMarker)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3object.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3object.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3ObjectMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3object.FieldFileID:
+		return m.FileID()
+	case s3object.FieldBucketName:
+		return m.BucketName()
+	case s3object.FieldObjectKey:
+		return m.ObjectKey()
+	case s3object.FieldUserID:
+		return m.UserID()
+	case s3object.FieldEtag:
+		return m.Etag()
+	case s3object.FieldStorageClass:
+		return m.StorageClass()
+	case s3object.FieldContentType:
+		return m.ContentType()
+	case s3object.FieldUserMetadata:
+		return m.UserMetadata()
+	case s3object.FieldTags:
+		return m.Tags()
+	case s3object.FieldVersionID:
+		return m.VersionID()
+	case s3object.FieldIsLatest:
+		return m.IsLatest()
+	case s3object.FieldIsDeleteMarker:
+		return m.IsDeleteMarker()
+	case s3object.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3object.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3ObjectMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3object.FieldFileID:
+		return m.OldFileID(ctx)
+	case s3object.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3object.FieldObjectKey:
+		return m.OldObjectKey(ctx)
+	case s3object.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3object.FieldEtag:
+		return m.OldEtag(ctx)
+	case s3object.FieldStorageClass:
+		return m.OldStorageClass(ctx)
+	case s3object.FieldContentType:
+		return m.OldContentType(ctx)
+	case s3object.FieldUserMetadata:
+		return m.OldUserMetadata(ctx)
+	case s3object.FieldTags:
+		return m.OldTags(ctx)
+	case s3object.FieldVersionID:
+		return m.OldVersionID(ctx)
+	case s3object.FieldIsLatest:
+		return m.OldIsLatest(ctx)
+	case s3object.FieldIsDeleteMarker:
+		return m.OldIsDeleteMarker(ctx)
+	case s3object.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3object.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3Object field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3ObjectMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3object.FieldFileID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFileID(v)
+		return nil
+	case s3object.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3object.FieldObjectKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObjectKey(v)
+		return nil
+	case s3object.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3object.FieldEtag:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEtag(v)
+		return nil
+	case s3object.FieldStorageClass:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStorageClass(v)
+		return nil
+	case s3object.FieldContentType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContentType(v)
+		return nil
+	case s3object.FieldUserMetadata:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserMetadata(v)
+		return nil
+	case s3object.FieldTags:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTags(v)
+		return nil
+	case s3object.FieldVersionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersionID(v)
+		return nil
+	case s3object.FieldIsLatest:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsLatest(v)
+		return nil
+	case s3object.FieldIsDeleteMarker:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsDeleteMarker(v)
+		return nil
+	case s3object.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3object.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3Object field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3ObjectMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3ObjectMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3ObjectMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3Object numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3ObjectMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(s3object.FieldFileID) {
+		fields = append(fields, s3object.FieldFileID)
+	}
+	if m.FieldCleared(s3object.FieldEtag) {
+		fields = append(fields, s3object.FieldEtag)
+	}
+	if m.FieldCleared(s3object.FieldContentType) {
+		fields = append(fields, s3object.FieldContentType)
+	}
+	if m.FieldCleared(s3object.FieldUserMetadata) {
+		fields = append(fields, s3object.FieldUserMetadata)
+	}
+	if m.FieldCleared(s3object.FieldTags) {
+		fields = append(fields, s3object.FieldTags)
+	}
+	if m.FieldCleared(s3object.FieldVersionID) {
+		fields = append(fields, s3object.FieldVersionID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3ObjectMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3ObjectMutation) ClearField(name string) error {
+	switch name {
+	case s3object.FieldFileID:
+		m.ClearFileID()
+		return nil
+	case s3object.FieldEtag:
+		m.ClearEtag()
+		return nil
+	case s3object.FieldContentType:
+		m.ClearContentType()
+		return nil
+	case s3object.FieldUserMetadata:
+		m.ClearUserMetadata()
+		return nil
+	case s3object.FieldTags:
+		m.ClearTags()
+		return nil
+	case s3object.FieldVersionID:
+		m.ClearVersionID()
+		return nil
+	}
+	return fmt.Errorf("unknown S3Object nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3ObjectMutation) ResetField(name string) error {
+	switch name {
+	case s3object.FieldFileID:
+		m.ResetFileID()
+		return nil
+	case s3object.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3object.FieldObjectKey:
+		m.ResetObjectKey()
+		return nil
+	case s3object.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3object.FieldEtag:
+		m.ResetEtag()
+		return nil
+	case s3object.FieldStorageClass:
+		m.ResetStorageClass()
+		return nil
+	case s3object.FieldContentType:
+		m.ResetContentType()
+		return nil
+	case s3object.FieldUserMetadata:
+		m.ResetUserMetadata()
+		return nil
+	case s3object.FieldTags:
+		m.ResetTags()
+		return nil
+	case s3object.FieldVersionID:
+		m.ResetVersionID()
+		return nil
+	case s3object.FieldIsLatest:
+		m.ResetIsLatest()
+		return nil
+	case s3object.FieldIsDeleteMarker:
+		m.ResetIsDeleteMarker()
+		return nil
+	case s3object.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3object.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3Object field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3ObjectMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3ObjectMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3ObjectMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3ObjectMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3ObjectMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3ObjectMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3ObjectMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3Object unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3ObjectMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3Object edge %s", name)
+}
+
+// S3ObjectACLMutation represents an operation that mutates the S3ObjectACL nodes in the graph.
+type S3ObjectACLMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	bucket_name   *string
+	object_key    *string
+	version_id    *string
+	user_id       *string
+	acl_config    *string
+	created_at    *time.Time
+	updated_at    *time.Time
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*S3ObjectACL, error)
+	predicates    []predicate.S3ObjectACL
+}
+
+var _ ent.Mutation = (*S3ObjectACLMutation)(nil)
+
+// s3objectaclOption allows management of the mutation configuration using functional options.
+type s3objectaclOption func(*S3ObjectACLMutation)
+
+// newS3ObjectACLMutation creates new mutation for the S3ObjectACL entity.
+func newS3ObjectACLMutation(c config, op Op, opts ...s3objectaclOption) *S3ObjectACLMutation {
+	m := &S3ObjectACLMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3ObjectACL,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3ObjectACLID sets the ID field of the mutation.
+func withS3ObjectACLID(id int) s3objectaclOption {
+	return func(m *S3ObjectACLMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3ObjectACL
+		)
+		m.oldValue = func(ctx context.Context) (*S3ObjectACL, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3ObjectACL.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3ObjectACL sets the old S3ObjectACL of the mutation.
+func withS3ObjectACL(node *S3ObjectACL) s3objectaclOption {
+	return func(m *S3ObjectACLMutation) {
+		m.oldValue = func(context.Context) (*S3ObjectACL, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3ObjectACLMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3ObjectACLMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3ObjectACLMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3ObjectACLMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3ObjectACL.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3ObjectACLMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3ObjectACLMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3ObjectACLMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetObjectKey sets the "object_key" field.
+func (m *S3ObjectACLMutation) SetObjectKey(s string) {
+	m.object_key = &s
+}
+
+// ObjectKey returns the value of the "object_key" field in the mutation.
+func (m *S3ObjectACLMutation) ObjectKey() (r string, exists bool) {
+	v := m.object_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObjectKey returns the old "object_key" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldObjectKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObjectKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObjectKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObjectKey: %w", err)
+	}
+	return oldValue.ObjectKey, nil
+}
+
+// ResetObjectKey resets all changes to the "object_key" field.
+func (m *S3ObjectACLMutation) ResetObjectKey() {
+	m.object_key = nil
+}
+
+// SetVersionID sets the "version_id" field.
+func (m *S3ObjectACLMutation) SetVersionID(s string) {
+	m.version_id = &s
+}
+
+// VersionID returns the value of the "version_id" field in the mutation.
+func (m *S3ObjectACLMutation) VersionID() (r string, exists bool) {
+	v := m.version_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersionID returns the old "version_id" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldVersionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersionID: %w", err)
+	}
+	return oldValue.VersionID, nil
+}
+
+// ClearVersionID clears the value of the "version_id" field.
+func (m *S3ObjectACLMutation) ClearVersionID() {
+	m.version_id = nil
+	m.clearedFields[s3objectacl.FieldVersionID] = struct{}{}
+}
+
+// VersionIDCleared returns if the "version_id" field was cleared in this mutation.
+func (m *S3ObjectACLMutation) VersionIDCleared() bool {
+	_, ok := m.clearedFields[s3objectacl.FieldVersionID]
+	return ok
+}
+
+// ResetVersionID resets all changes to the "version_id" field.
+func (m *S3ObjectACLMutation) ResetVersionID() {
+	m.version_id = nil
+	delete(m.clearedFields, s3objectacl.FieldVersionID)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3ObjectACLMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3ObjectACLMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3ObjectACLMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetACLConfig sets the "acl_config" field.
+func (m *S3ObjectACLMutation) SetACLConfig(s string) {
+	m.acl_config = &s
+}
+
+// ACLConfig returns the value of the "acl_config" field in the mutation.
+func (m *S3ObjectACLMutation) ACLConfig() (r string, exists bool) {
+	v := m.acl_config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldACLConfig returns the old "acl_config" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldACLConfig(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldACLConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldACLConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldACLConfig: %w", err)
+	}
+	return oldValue.ACLConfig, nil
+}
+
+// ResetACLConfig resets all changes to the "acl_config" field.
+func (m *S3ObjectACLMutation) ResetACLConfig() {
+	m.acl_config = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3ObjectACLMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3ObjectACLMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3ObjectACLMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3ObjectACLMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3ObjectACLMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3ObjectACL entity.
+// If the S3ObjectACL object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectACLMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3ObjectACLMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3ObjectACLMutation builder.
+func (m *S3ObjectACLMutation) Where(ps ...predicate.S3ObjectACL) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3ObjectACLMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3ObjectACLMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3ObjectACL, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3ObjectACLMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3ObjectACLMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3ObjectACL).
+func (m *S3ObjectACLMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3ObjectACLMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.bucket_name != nil {
+		fields = append(fields, s3objectacl.FieldBucketName)
+	}
+	if m.object_key != nil {
+		fields = append(fields, s3objectacl.FieldObjectKey)
+	}
+	if m.version_id != nil {
+		fields = append(fields, s3objectacl.FieldVersionID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3objectacl.FieldUserID)
+	}
+	if m.acl_config != nil {
+		fields = append(fields, s3objectacl.FieldACLConfig)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3objectacl.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3objectacl.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3ObjectACLMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3objectacl.FieldBucketName:
+		return m.BucketName()
+	case s3objectacl.FieldObjectKey:
+		return m.ObjectKey()
+	case s3objectacl.FieldVersionID:
+		return m.VersionID()
+	case s3objectacl.FieldUserID:
+		return m.UserID()
+	case s3objectacl.FieldACLConfig:
+		return m.ACLConfig()
+	case s3objectacl.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3objectacl.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3ObjectACLMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3objectacl.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3objectacl.FieldObjectKey:
+		return m.OldObjectKey(ctx)
+	case s3objectacl.FieldVersionID:
+		return m.OldVersionID(ctx)
+	case s3objectacl.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3objectacl.FieldACLConfig:
+		return m.OldACLConfig(ctx)
+	case s3objectacl.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3objectacl.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3ObjectACL field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3ObjectACLMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3objectacl.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3objectacl.FieldObjectKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObjectKey(v)
+		return nil
+	case s3objectacl.FieldVersionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersionID(v)
+		return nil
+	case s3objectacl.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3objectacl.FieldACLConfig:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetACLConfig(v)
+		return nil
+	case s3objectacl.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3objectacl.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3ObjectACL field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3ObjectACLMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3ObjectACLMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3ObjectACLMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3ObjectACL numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3ObjectACLMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(s3objectacl.FieldVersionID) {
+		fields = append(fields, s3objectacl.FieldVersionID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3ObjectACLMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3ObjectACLMutation) ClearField(name string) error {
+	switch name {
+	case s3objectacl.FieldVersionID:
+		m.ClearVersionID()
+		return nil
+	}
+	return fmt.Errorf("unknown S3ObjectACL nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3ObjectACLMutation) ResetField(name string) error {
+	switch name {
+	case s3objectacl.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3objectacl.FieldObjectKey:
+		m.ResetObjectKey()
+		return nil
+	case s3objectacl.FieldVersionID:
+		m.ResetVersionID()
+		return nil
+	case s3objectacl.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3objectacl.FieldACLConfig:
+		m.ResetACLConfig()
+		return nil
+	case s3objectacl.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3objectacl.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3ObjectACL field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3ObjectACLMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3ObjectACLMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3ObjectACLMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3ObjectACLMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3ObjectACLMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3ObjectACLMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3ObjectACLMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3ObjectACL unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3ObjectACLMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3ObjectACL edge %s", name)
+}
+
+// S3ObjectEncryptionMutation represents an operation that mutates the S3ObjectEncryption nodes in the graph.
+type S3ObjectEncryptionMutation struct {
+	config
+	op              Op
+	typ             string
+	id              *int
+	bucket_name     *string
+	object_key      *string
+	version_id      *string
+	user_id         *string
+	encryption_type *string
+	algorithm       *string
+	key_id          *string
+	encrypted_key   *string
+	iv              *string
+	created_at      *time.Time
+	updated_at      *time.Time
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*S3ObjectEncryption, error)
+	predicates      []predicate.S3ObjectEncryption
+}
+
+var _ ent.Mutation = (*S3ObjectEncryptionMutation)(nil)
+
+// s3objectencryptionOption allows management of the mutation configuration using functional options.
+type s3objectencryptionOption func(*S3ObjectEncryptionMutation)
+
+// newS3ObjectEncryptionMutation creates new mutation for the S3ObjectEncryption entity.
+func newS3ObjectEncryptionMutation(c config, op Op, opts ...s3objectencryptionOption) *S3ObjectEncryptionMutation {
+	m := &S3ObjectEncryptionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeS3ObjectEncryption,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withS3ObjectEncryptionID sets the ID field of the mutation.
+func withS3ObjectEncryptionID(id int) s3objectencryptionOption {
+	return func(m *S3ObjectEncryptionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *S3ObjectEncryption
+		)
+		m.oldValue = func(ctx context.Context) (*S3ObjectEncryption, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().S3ObjectEncryption.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withS3ObjectEncryption sets the old S3ObjectEncryption of the mutation.
+func withS3ObjectEncryption(node *S3ObjectEncryption) s3objectencryptionOption {
+	return func(m *S3ObjectEncryptionMutation) {
+		m.oldValue = func(context.Context) (*S3ObjectEncryption, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m S3ObjectEncryptionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m S3ObjectEncryptionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *S3ObjectEncryptionMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *S3ObjectEncryptionMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().S3ObjectEncryption.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetBucketName sets the "bucket_name" field.
+func (m *S3ObjectEncryptionMutation) SetBucketName(s string) {
+	m.bucket_name = &s
+}
+
+// BucketName returns the value of the "bucket_name" field in the mutation.
+func (m *S3ObjectEncryptionMutation) BucketName() (r string, exists bool) {
+	v := m.bucket_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBucketName returns the old "bucket_name" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldBucketName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBucketName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBucketName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBucketName: %w", err)
+	}
+	return oldValue.BucketName, nil
+}
+
+// ResetBucketName resets all changes to the "bucket_name" field.
+func (m *S3ObjectEncryptionMutation) ResetBucketName() {
+	m.bucket_name = nil
+}
+
+// SetObjectKey sets the "object_key" field.
+func (m *S3ObjectEncryptionMutation) SetObjectKey(s string) {
+	m.object_key = &s
+}
+
+// ObjectKey returns the value of the "object_key" field in the mutation.
+func (m *S3ObjectEncryptionMutation) ObjectKey() (r string, exists bool) {
+	v := m.object_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObjectKey returns the old "object_key" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldObjectKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObjectKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObjectKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObjectKey: %w", err)
+	}
+	return oldValue.ObjectKey, nil
+}
+
+// ResetObjectKey resets all changes to the "object_key" field.
+func (m *S3ObjectEncryptionMutation) ResetObjectKey() {
+	m.object_key = nil
+}
+
+// SetVersionID sets the "version_id" field.
+func (m *S3ObjectEncryptionMutation) SetVersionID(s string) {
+	m.version_id = &s
+}
+
+// VersionID returns the value of the "version_id" field in the mutation.
+func (m *S3ObjectEncryptionMutation) VersionID() (r string, exists bool) {
+	v := m.version_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersionID returns the old "version_id" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldVersionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersionID: %w", err)
+	}
+	return oldValue.VersionID, nil
+}
+
+// ClearVersionID clears the value of the "version_id" field.
+func (m *S3ObjectEncryptionMutation) ClearVersionID() {
+	m.version_id = nil
+	m.clearedFields[s3objectencryption.FieldVersionID] = struct{}{}
+}
+
+// VersionIDCleared returns if the "version_id" field was cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) VersionIDCleared() bool {
+	_, ok := m.clearedFields[s3objectencryption.FieldVersionID]
+	return ok
+}
+
+// ResetVersionID resets all changes to the "version_id" field.
+func (m *S3ObjectEncryptionMutation) ResetVersionID() {
+	m.version_id = nil
+	delete(m.clearedFields, s3objectencryption.FieldVersionID)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *S3ObjectEncryptionMutation) SetUserID(s string) {
+	m.user_id = &s
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *S3ObjectEncryptionMutation) UserID() (r string, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldUserID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *S3ObjectEncryptionMutation) ResetUserID() {
+	m.user_id = nil
+}
+
+// SetEncryptionType sets the "encryption_type" field.
+func (m *S3ObjectEncryptionMutation) SetEncryptionType(s string) {
+	m.encryption_type = &s
+}
+
+// EncryptionType returns the value of the "encryption_type" field in the mutation.
+func (m *S3ObjectEncryptionMutation) EncryptionType() (r string, exists bool) {
+	v := m.encryption_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEncryptionType returns the old "encryption_type" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldEncryptionType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEncryptionType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEncryptionType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEncryptionType: %w", err)
+	}
+	return oldValue.EncryptionType, nil
+}
+
+// ResetEncryptionType resets all changes to the "encryption_type" field.
+func (m *S3ObjectEncryptionMutation) ResetEncryptionType() {
+	m.encryption_type = nil
+}
+
+// SetAlgorithm sets the "algorithm" field.
+func (m *S3ObjectEncryptionMutation) SetAlgorithm(s string) {
+	m.algorithm = &s
+}
+
+// Algorithm returns the value of the "algorithm" field in the mutation.
+func (m *S3ObjectEncryptionMutation) Algorithm() (r string, exists bool) {
+	v := m.algorithm
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAlgorithm returns the old "algorithm" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldAlgorithm(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAlgorithm is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAlgorithm requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAlgorithm: %w", err)
+	}
+	return oldValue.Algorithm, nil
+}
+
+// ResetAlgorithm resets all changes to the "algorithm" field.
+func (m *S3ObjectEncryptionMutation) ResetAlgorithm() {
+	m.algorithm = nil
+}
+
+// SetKeyID sets the "key_id" field.
+func (m *S3ObjectEncryptionMutation) SetKeyID(s string) {
+	m.key_id = &s
+}
+
+// KeyID returns the value of the "key_id" field in the mutation.
+func (m *S3ObjectEncryptionMutation) KeyID() (r string, exists bool) {
+	v := m.key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKeyID returns the old "key_id" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldKeyID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKeyID: %w", err)
+	}
+	return oldValue.KeyID, nil
+}
+
+// ClearKeyID clears the value of the "key_id" field.
+func (m *S3ObjectEncryptionMutation) ClearKeyID() {
+	m.key_id = nil
+	m.clearedFields[s3objectencryption.FieldKeyID] = struct{}{}
+}
+
+// KeyIDCleared returns if the "key_id" field was cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) KeyIDCleared() bool {
+	_, ok := m.clearedFields[s3objectencryption.FieldKeyID]
+	return ok
+}
+
+// ResetKeyID resets all changes to the "key_id" field.
+func (m *S3ObjectEncryptionMutation) ResetKeyID() {
+	m.key_id = nil
+	delete(m.clearedFields, s3objectencryption.FieldKeyID)
+}
+
+// SetEncryptedKey sets the "encrypted_key" field.
+func (m *S3ObjectEncryptionMutation) SetEncryptedKey(s string) {
+	m.encrypted_key = &s
+}
+
+// EncryptedKey returns the value of the "encrypted_key" field in the mutation.
+func (m *S3ObjectEncryptionMutation) EncryptedKey() (r string, exists bool) {
+	v := m.encrypted_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEncryptedKey returns the old "encrypted_key" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldEncryptedKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEncryptedKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEncryptedKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEncryptedKey: %w", err)
+	}
+	return oldValue.EncryptedKey, nil
+}
+
+// ClearEncryptedKey clears the value of the "encrypted_key" field.
+func (m *S3ObjectEncryptionMutation) ClearEncryptedKey() {
+	m.encrypted_key = nil
+	m.clearedFields[s3objectencryption.FieldEncryptedKey] = struct{}{}
+}
+
+// EncryptedKeyCleared returns if the "encrypted_key" field was cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) EncryptedKeyCleared() bool {
+	_, ok := m.clearedFields[s3objectencryption.FieldEncryptedKey]
+	return ok
+}
+
+// ResetEncryptedKey resets all changes to the "encrypted_key" field.
+func (m *S3ObjectEncryptionMutation) ResetEncryptedKey() {
+	m.encrypted_key = nil
+	delete(m.clearedFields, s3objectencryption.FieldEncryptedKey)
+}
+
+// SetIv sets the "iv" field.
+func (m *S3ObjectEncryptionMutation) SetIv(s string) {
+	m.iv = &s
+}
+
+// Iv returns the value of the "iv" field in the mutation.
+func (m *S3ObjectEncryptionMutation) Iv() (r string, exists bool) {
+	v := m.iv
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIv returns the old "iv" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldIv(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIv is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIv requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIv: %w", err)
+	}
+	return oldValue.Iv, nil
+}
+
+// ClearIv clears the value of the "iv" field.
+func (m *S3ObjectEncryptionMutation) ClearIv() {
+	m.iv = nil
+	m.clearedFields[s3objectencryption.FieldIv] = struct{}{}
+}
+
+// IvCleared returns if the "iv" field was cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) IvCleared() bool {
+	_, ok := m.clearedFields[s3objectencryption.FieldIv]
+	return ok
+}
+
+// ResetIv resets all changes to the "iv" field.
+func (m *S3ObjectEncryptionMutation) ResetIv() {
+	m.iv = nil
+	delete(m.clearedFields, s3objectencryption.FieldIv)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *S3ObjectEncryptionMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *S3ObjectEncryptionMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *S3ObjectEncryptionMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *S3ObjectEncryptionMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *S3ObjectEncryptionMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the S3ObjectEncryption entity.
+// If the S3ObjectEncryption object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *S3ObjectEncryptionMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *S3ObjectEncryptionMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the S3ObjectEncryptionMutation builder.
+func (m *S3ObjectEncryptionMutation) Where(ps ...predicate.S3ObjectEncryption) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the S3ObjectEncryptionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *S3ObjectEncryptionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.S3ObjectEncryption, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *S3ObjectEncryptionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *S3ObjectEncryptionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (S3ObjectEncryption).
+func (m *S3ObjectEncryptionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *S3ObjectEncryptionMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.bucket_name != nil {
+		fields = append(fields, s3objectencryption.FieldBucketName)
+	}
+	if m.object_key != nil {
+		fields = append(fields, s3objectencryption.FieldObjectKey)
+	}
+	if m.version_id != nil {
+		fields = append(fields, s3objectencryption.FieldVersionID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, s3objectencryption.FieldUserID)
+	}
+	if m.encryption_type != nil {
+		fields = append(fields, s3objectencryption.FieldEncryptionType)
+	}
+	if m.algorithm != nil {
+		fields = append(fields, s3objectencryption.FieldAlgorithm)
+	}
+	if m.key_id != nil {
+		fields = append(fields, s3objectencryption.FieldKeyID)
+	}
+	if m.encrypted_key != nil {
+		fields = append(fields, s3objectencryption.FieldEncryptedKey)
+	}
+	if m.iv != nil {
+		fields = append(fields, s3objectencryption.FieldIv)
+	}
+	if m.created_at != nil {
+		fields = append(fields, s3objectencryption.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, s3objectencryption.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *S3ObjectEncryptionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case s3objectencryption.FieldBucketName:
+		return m.BucketName()
+	case s3objectencryption.FieldObjectKey:
+		return m.ObjectKey()
+	case s3objectencryption.FieldVersionID:
+		return m.VersionID()
+	case s3objectencryption.FieldUserID:
+		return m.UserID()
+	case s3objectencryption.FieldEncryptionType:
+		return m.EncryptionType()
+	case s3objectencryption.FieldAlgorithm:
+		return m.Algorithm()
+	case s3objectencryption.FieldKeyID:
+		return m.KeyID()
+	case s3objectencryption.FieldEncryptedKey:
+		return m.EncryptedKey()
+	case s3objectencryption.FieldIv:
+		return m.Iv()
+	case s3objectencryption.FieldCreatedAt:
+		return m.CreatedAt()
+	case s3objectencryption.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *S3ObjectEncryptionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case s3objectencryption.FieldBucketName:
+		return m.OldBucketName(ctx)
+	case s3objectencryption.FieldObjectKey:
+		return m.OldObjectKey(ctx)
+	case s3objectencryption.FieldVersionID:
+		return m.OldVersionID(ctx)
+	case s3objectencryption.FieldUserID:
+		return m.OldUserID(ctx)
+	case s3objectencryption.FieldEncryptionType:
+		return m.OldEncryptionType(ctx)
+	case s3objectencryption.FieldAlgorithm:
+		return m.OldAlgorithm(ctx)
+	case s3objectencryption.FieldKeyID:
+		return m.OldKeyID(ctx)
+	case s3objectencryption.FieldEncryptedKey:
+		return m.OldEncryptedKey(ctx)
+	case s3objectencryption.FieldIv:
+		return m.OldIv(ctx)
+	case s3objectencryption.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case s3objectencryption.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown S3ObjectEncryption field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3ObjectEncryptionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case s3objectencryption.FieldBucketName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBucketName(v)
+		return nil
+	case s3objectencryption.FieldObjectKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObjectKey(v)
+		return nil
+	case s3objectencryption.FieldVersionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersionID(v)
+		return nil
+	case s3objectencryption.FieldUserID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case s3objectencryption.FieldEncryptionType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEncryptionType(v)
+		return nil
+	case s3objectencryption.FieldAlgorithm:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlgorithm(v)
+		return nil
+	case s3objectencryption.FieldKeyID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKeyID(v)
+		return nil
+	case s3objectencryption.FieldEncryptedKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEncryptedKey(v)
+		return nil
+	case s3objectencryption.FieldIv:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIv(v)
+		return nil
+	case s3objectencryption.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case s3objectencryption.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown S3ObjectEncryption field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *S3ObjectEncryptionMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *S3ObjectEncryptionMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *S3ObjectEncryptionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown S3ObjectEncryption numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *S3ObjectEncryptionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(s3objectencryption.FieldVersionID) {
+		fields = append(fields, s3objectencryption.FieldVersionID)
+	}
+	if m.FieldCleared(s3objectencryption.FieldKeyID) {
+		fields = append(fields, s3objectencryption.FieldKeyID)
+	}
+	if m.FieldCleared(s3objectencryption.FieldEncryptedKey) {
+		fields = append(fields, s3objectencryption.FieldEncryptedKey)
+	}
+	if m.FieldCleared(s3objectencryption.FieldIv) {
+		fields = append(fields, s3objectencryption.FieldIv)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *S3ObjectEncryptionMutation) ClearField(name string) error {
+	switch name {
+	case s3objectencryption.FieldVersionID:
+		m.ClearVersionID()
+		return nil
+	case s3objectencryption.FieldKeyID:
+		m.ClearKeyID()
+		return nil
+	case s3objectencryption.FieldEncryptedKey:
+		m.ClearEncryptedKey()
+		return nil
+	case s3objectencryption.FieldIv:
+		m.ClearIv()
+		return nil
+	}
+	return fmt.Errorf("unknown S3ObjectEncryption nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *S3ObjectEncryptionMutation) ResetField(name string) error {
+	switch name {
+	case s3objectencryption.FieldBucketName:
+		m.ResetBucketName()
+		return nil
+	case s3objectencryption.FieldObjectKey:
+		m.ResetObjectKey()
+		return nil
+	case s3objectencryption.FieldVersionID:
+		m.ResetVersionID()
+		return nil
+	case s3objectencryption.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case s3objectencryption.FieldEncryptionType:
+		m.ResetEncryptionType()
+		return nil
+	case s3objectencryption.FieldAlgorithm:
+		m.ResetAlgorithm()
+		return nil
+	case s3objectencryption.FieldKeyID:
+		m.ResetKeyID()
+		return nil
+	case s3objectencryption.FieldEncryptedKey:
+		m.ResetEncryptedKey()
+		return nil
+	case s3objectencryption.FieldIv:
+		m.ResetIv()
+		return nil
+	case s3objectencryption.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case s3objectencryption.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown S3ObjectEncryption field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *S3ObjectEncryptionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *S3ObjectEncryptionMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *S3ObjectEncryptionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *S3ObjectEncryptionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *S3ObjectEncryptionMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *S3ObjectEncryptionMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown S3ObjectEncryption unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *S3ObjectEncryptionMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown S3ObjectEncryption edge %s", name)
+}
+
 // ShareMutation represents an operation that mutates the Share nodes in the graph.
 type ShareMutation struct {
 	config
@@ -9711,6 +17784,386 @@ func (m *ShareMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *ShareMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Share edge %s", name)
+}
+
+// SysConfigMutation represents an operation that mutates the SysConfig nodes in the graph.
+type SysConfigMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	key           *string
+	value         *string
+	clearedFields map[string]struct{}
+	done          bool
+	oldValue      func(context.Context) (*SysConfig, error)
+	predicates    []predicate.SysConfig
+}
+
+var _ ent.Mutation = (*SysConfigMutation)(nil)
+
+// sysconfigOption allows management of the mutation configuration using functional options.
+type sysconfigOption func(*SysConfigMutation)
+
+// newSysConfigMutation creates new mutation for the SysConfig entity.
+func newSysConfigMutation(c config, op Op, opts ...sysconfigOption) *SysConfigMutation {
+	m := &SysConfigMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSysConfig,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSysConfigID sets the ID field of the mutation.
+func withSysConfigID(id int) sysconfigOption {
+	return func(m *SysConfigMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SysConfig
+		)
+		m.oldValue = func(ctx context.Context) (*SysConfig, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SysConfig.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSysConfig sets the old SysConfig of the mutation.
+func withSysConfig(node *SysConfig) sysconfigOption {
+	return func(m *SysConfigMutation) {
+		m.oldValue = func(context.Context) (*SysConfig, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SysConfigMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SysConfigMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SysConfigMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SysConfigMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SysConfig.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetKey sets the "key" field.
+func (m *SysConfigMutation) SetKey(s string) {
+	m.key = &s
+}
+
+// Key returns the value of the "key" field in the mutation.
+func (m *SysConfigMutation) Key() (r string, exists bool) {
+	v := m.key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKey returns the old "key" field's value of the SysConfig entity.
+// If the SysConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SysConfigMutation) OldKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKey: %w", err)
+	}
+	return oldValue.Key, nil
+}
+
+// ResetKey resets all changes to the "key" field.
+func (m *SysConfigMutation) ResetKey() {
+	m.key = nil
+}
+
+// SetValue sets the "value" field.
+func (m *SysConfigMutation) SetValue(s string) {
+	m.value = &s
+}
+
+// Value returns the value of the "value" field in the mutation.
+func (m *SysConfigMutation) Value() (r string, exists bool) {
+	v := m.value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldValue returns the old "value" field's value of the SysConfig entity.
+// If the SysConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SysConfigMutation) OldValue(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldValue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldValue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldValue: %w", err)
+	}
+	return oldValue.Value, nil
+}
+
+// ResetValue resets all changes to the "value" field.
+func (m *SysConfigMutation) ResetValue() {
+	m.value = nil
+}
+
+// Where appends a list predicates to the SysConfigMutation builder.
+func (m *SysConfigMutation) Where(ps ...predicate.SysConfig) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SysConfigMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SysConfigMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SysConfig, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SysConfigMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SysConfigMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SysConfig).
+func (m *SysConfigMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SysConfigMutation) Fields() []string {
+	fields := make([]string, 0, 2)
+	if m.key != nil {
+		fields = append(fields, sysconfig.FieldKey)
+	}
+	if m.value != nil {
+		fields = append(fields, sysconfig.FieldValue)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SysConfigMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sysconfig.FieldKey:
+		return m.Key()
+	case sysconfig.FieldValue:
+		return m.Value()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SysConfigMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sysconfig.FieldKey:
+		return m.OldKey(ctx)
+	case sysconfig.FieldValue:
+		return m.OldValue(ctx)
+	}
+	return nil, fmt.Errorf("unknown SysConfig field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SysConfigMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sysconfig.FieldKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKey(v)
+		return nil
+	case sysconfig.FieldValue:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetValue(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SysConfig field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SysConfigMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SysConfigMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SysConfigMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown SysConfig numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SysConfigMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SysConfigMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SysConfigMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown SysConfig nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SysConfigMutation) ResetField(name string) error {
+	switch name {
+	case sysconfig.FieldKey:
+		m.ResetKey()
+		return nil
+	case sysconfig.FieldValue:
+		m.ResetValue()
+		return nil
+	}
+	return fmt.Errorf("unknown SysConfig field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SysConfigMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SysConfigMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SysConfigMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SysConfigMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SysConfigMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SysConfigMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SysConfigMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SysConfig unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SysConfigMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SysConfig edge %s", name)
 }
 
 // UploadChunkMutation represents an operation that mutates the UploadChunk nodes in the graph.

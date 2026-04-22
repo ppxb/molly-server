@@ -20,6 +20,18 @@ func (f APIKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIKeyMutation", m)
 }
 
+// The DiskFunc type is an adapter to allow the use of ordinary
+// function as Disk mutator.
+type DiskFunc func(context.Context, *ent.DiskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DiskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DiskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DiskMutation", m)
+}
+
 // The DownloadTaskFunc type is an adapter to allow the use of ordinary
 // function as DownloadTask mutator.
 type DownloadTaskFunc func(context.Context, *ent.DownloadTaskMutation) (ent.Value, error)
@@ -128,6 +140,138 @@ func (f RecycledFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RecycledMutation", m)
 }
 
+// The S3BucketFunc type is an adapter to allow the use of ordinary
+// function as S3Bucket mutator.
+type S3BucketFunc func(context.Context, *ent.S3BucketMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3BucketFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3BucketMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3BucketMutation", m)
+}
+
+// The S3BucketACLFunc type is an adapter to allow the use of ordinary
+// function as S3BucketACL mutator.
+type S3BucketACLFunc func(context.Context, *ent.S3BucketACLMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3BucketACLFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3BucketACLMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3BucketACLMutation", m)
+}
+
+// The S3BucketCORSFunc type is an adapter to allow the use of ordinary
+// function as S3BucketCORS mutator.
+type S3BucketCORSFunc func(context.Context, *ent.S3BucketCORSMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3BucketCORSFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3BucketCORSMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3BucketCORSMutation", m)
+}
+
+// The S3BucketLifecycleFunc type is an adapter to allow the use of ordinary
+// function as S3BucketLifecycle mutator.
+type S3BucketLifecycleFunc func(context.Context, *ent.S3BucketLifecycleMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3BucketLifecycleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3BucketLifecycleMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3BucketLifecycleMutation", m)
+}
+
+// The S3BucketPolicyFunc type is an adapter to allow the use of ordinary
+// function as S3BucketPolicy mutator.
+type S3BucketPolicyFunc func(context.Context, *ent.S3BucketPolicyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3BucketPolicyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3BucketPolicyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3BucketPolicyMutation", m)
+}
+
+// The S3EncryptionKeyFunc type is an adapter to allow the use of ordinary
+// function as S3EncryptionKey mutator.
+type S3EncryptionKeyFunc func(context.Context, *ent.S3EncryptionKeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3EncryptionKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3EncryptionKeyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3EncryptionKeyMutation", m)
+}
+
+// The S3MultipartPartFunc type is an adapter to allow the use of ordinary
+// function as S3MultipartPart mutator.
+type S3MultipartPartFunc func(context.Context, *ent.S3MultipartPartMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3MultipartPartFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3MultipartPartMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3MultipartPartMutation", m)
+}
+
+// The S3MultipartUploadFunc type is an adapter to allow the use of ordinary
+// function as S3MultipartUpload mutator.
+type S3MultipartUploadFunc func(context.Context, *ent.S3MultipartUploadMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3MultipartUploadFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3MultipartUploadMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3MultipartUploadMutation", m)
+}
+
+// The S3ObjectFunc type is an adapter to allow the use of ordinary
+// function as S3Object mutator.
+type S3ObjectFunc func(context.Context, *ent.S3ObjectMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3ObjectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3ObjectMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3ObjectMutation", m)
+}
+
+// The S3ObjectACLFunc type is an adapter to allow the use of ordinary
+// function as S3ObjectACL mutator.
+type S3ObjectACLFunc func(context.Context, *ent.S3ObjectACLMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3ObjectACLFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3ObjectACLMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3ObjectACLMutation", m)
+}
+
+// The S3ObjectEncryptionFunc type is an adapter to allow the use of ordinary
+// function as S3ObjectEncryption mutator.
+type S3ObjectEncryptionFunc func(context.Context, *ent.S3ObjectEncryptionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f S3ObjectEncryptionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.S3ObjectEncryptionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.S3ObjectEncryptionMutation", m)
+}
+
 // The ShareFunc type is an adapter to allow the use of ordinary
 // function as Share mutator.
 type ShareFunc func(context.Context, *ent.ShareMutation) (ent.Value, error)
@@ -138,6 +282,18 @@ func (f ShareFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ShareMutation", m)
+}
+
+// The SysConfigFunc type is an adapter to allow the use of ordinary
+// function as SysConfig mutator.
+type SysConfigFunc func(context.Context, *ent.SysConfigMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SysConfigFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SysConfigMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SysConfigMutation", m)
 }
 
 // The UploadChunkFunc type is an adapter to allow the use of ordinary

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"molly-server/ent/apikey"
+	"molly-server/ent/disk"
 	"molly-server/ent/downloadtask"
 	"molly-server/ent/drive"
 	"molly-server/ent/entry"
@@ -16,7 +17,19 @@ import (
 	"molly-server/ent/grouppower"
 	"molly-server/ent/power"
 	"molly-server/ent/recycled"
+	"molly-server/ent/s3bucket"
+	"molly-server/ent/s3bucketacl"
+	"molly-server/ent/s3bucketcors"
+	"molly-server/ent/s3bucketlifecycle"
+	"molly-server/ent/s3bucketpolicy"
+	"molly-server/ent/s3encryptionkey"
+	"molly-server/ent/s3multipartpart"
+	"molly-server/ent/s3multipartupload"
+	"molly-server/ent/s3object"
+	"molly-server/ent/s3objectacl"
+	"molly-server/ent/s3objectencryption"
 	"molly-server/ent/share"
+	"molly-server/ent/sysconfig"
 	"molly-server/ent/uploadchunk"
 	"molly-server/ent/uploadpart"
 	"molly-server/ent/uploadsession"
@@ -90,24 +103,37 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			apikey.Table:        apikey.ValidColumn,
-			downloadtask.Table:  downloadtask.ValidColumn,
-			drive.Table:         drive.ValidColumn,
-			entry.Table:         entry.ValidColumn,
-			filechunk.Table:     filechunk.ValidColumn,
-			fileinfo.Table:      fileinfo.ValidColumn,
-			group.Table:         group.ValidColumn,
-			grouppower.Table:    grouppower.ValidColumn,
-			power.Table:         power.ValidColumn,
-			recycled.Table:      recycled.ValidColumn,
-			share.Table:         share.ValidColumn,
-			uploadchunk.Table:   uploadchunk.ValidColumn,
-			uploadpart.Table:    uploadpart.ValidColumn,
-			uploadsession.Table: uploadsession.ValidColumn,
-			uploadtask.Table:    uploadtask.ValidColumn,
-			user.Table:          user.ValidColumn,
-			userfile.Table:      userfile.ValidColumn,
-			virtualpath.Table:   virtualpath.ValidColumn,
+			apikey.Table:             apikey.ValidColumn,
+			disk.Table:               disk.ValidColumn,
+			downloadtask.Table:       downloadtask.ValidColumn,
+			drive.Table:              drive.ValidColumn,
+			entry.Table:              entry.ValidColumn,
+			filechunk.Table:          filechunk.ValidColumn,
+			fileinfo.Table:           fileinfo.ValidColumn,
+			group.Table:              group.ValidColumn,
+			grouppower.Table:         grouppower.ValidColumn,
+			power.Table:              power.ValidColumn,
+			recycled.Table:           recycled.ValidColumn,
+			s3bucket.Table:           s3bucket.ValidColumn,
+			s3bucketacl.Table:        s3bucketacl.ValidColumn,
+			s3bucketcors.Table:       s3bucketcors.ValidColumn,
+			s3bucketlifecycle.Table:  s3bucketlifecycle.ValidColumn,
+			s3bucketpolicy.Table:     s3bucketpolicy.ValidColumn,
+			s3encryptionkey.Table:    s3encryptionkey.ValidColumn,
+			s3multipartpart.Table:    s3multipartpart.ValidColumn,
+			s3multipartupload.Table:  s3multipartupload.ValidColumn,
+			s3object.Table:           s3object.ValidColumn,
+			s3objectacl.Table:        s3objectacl.ValidColumn,
+			s3objectencryption.Table: s3objectencryption.ValidColumn,
+			share.Table:              share.ValidColumn,
+			sysconfig.Table:          sysconfig.ValidColumn,
+			uploadchunk.Table:        uploadchunk.ValidColumn,
+			uploadpart.Table:         uploadpart.ValidColumn,
+			uploadsession.Table:      uploadsession.ValidColumn,
+			uploadtask.Table:         uploadtask.ValidColumn,
+			user.Table:               user.ValidColumn,
+			userfile.Table:           userfile.ValidColumn,
+			virtualpath.Table:        virtualpath.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

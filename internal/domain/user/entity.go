@@ -2,6 +2,8 @@ package user
 
 import (
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type State int
@@ -31,6 +33,20 @@ func (u *User) IsActive() bool {
 }
 func (u *User) IsDisabled() bool {
 	return u.State == StateDisabled
+}
+
+func (u *User) ValidatePassword(plain string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(plain))
+	return err == nil
+}
+
+func (u *User) SetPassword(plainPassword string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	u.Password = string(hash)
+	return nil
 }
 
 // Session 登录会话的权限快照，由 middleware 注入 gin.Context。

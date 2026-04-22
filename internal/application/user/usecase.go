@@ -38,7 +38,7 @@ func (uc *UseCase) Login(ctx context.Context, req LoginReq) (*LoginResp, error) 
 	if u.IsDisabled() {
 		return nil, domainuser.ErrDisabled
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(req.Password)); err != nil {
+	if !u.ValidatePassword(req.Password) {
 		return nil, domainuser.ErrInvalidCredential
 	}
 
@@ -124,7 +124,8 @@ func (uc *UseCase) GetByID(ctx context.Context, userID string) (*UserResp, error
 	return toUserResp(u), nil
 }
 
-const defaultGroupID = 2 // 普通用户组，可改为从 DB 查询默认组
+// TODO: 普通用户组，可设置为 ent 的默认值
+const defaultGroupID = 2
 
 func powerCharacteristics(powers []domainuser.Power) []string {
 	chars := make([]string, len(powers))

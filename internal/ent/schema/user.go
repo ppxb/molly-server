@@ -26,7 +26,7 @@ func (User) Fields() []ent.Field {
 		field.String("id").DefaultFunc(uuid.NewString).Immutable().Comment("UUID"),
 		field.String("nick_name").Comment("昵称"),
 		field.String("user_name").Unique().Comment("用户名"),
-		field.String("password").Comment("密码"),
+		field.String("password").Sensitive().Comment("密码"),
 		field.String("email").Comment("邮箱"),
 		field.String("phone").Default("").Comment("电话号码"),
 		field.Int("group_id").Comment("组 ID"),
@@ -43,5 +43,11 @@ func (User) Edges() []ent.Edge {
 		edge.From("group", Group.Type).Ref("users").Field("group_id").Required().Unique(),
 		edge.To("user_files", UserFile.Type),
 		edge.To("api_keys", APIKey.Type),
+	}
+}
+
+func (User) Mixin() []ent.Mixin {
+	return []ent.Mixin{
+		TimeMixin{},
 	}
 }

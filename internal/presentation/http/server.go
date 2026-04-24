@@ -6,30 +6,30 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
+	apprecycled "molly-server/internal/application/recycled"
 	"molly-server/internal/infrastructure/config"
 	"molly-server/internal/infrastructure/persistence"
+	"molly-server/pkg/cache"
 	"molly-server/pkg/logger"
 )
 
 type Server struct {
-	cfg    *config.Config
-	db     *persistence.DB
-	log    *logger.Logger
-	engine *gin.Engine
-	http   *http.Server
+	db   *persistence.DB
+	log  *logger.Logger
+	http *http.Server
 }
 
 // NewServer 构造 Server，同时完成路由注册
-func NewServer(cfg *config.Config, db *persistence.DB, log *logger.Logger) *Server {
-	engine := newRouter(cfg, db, log)
+func NewServer(cfg *config.Config,
+	db *persistence.DB,
+	c cache.Cache,
+	log *logger.Logger,
+	recycledUC *apprecycled.UseCase) *Server {
+	engine := newRouter(cfg, db, c, log, recycledUC)
 
 	return &Server{
-		cfg:    cfg,
-		db:     db,
-		log:    log,
-		engine: engine,
+		db:  db,
+		log: log,
 		http: &http.Server{
 			Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 			Handler:      engine,

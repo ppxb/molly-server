@@ -142,6 +142,17 @@ func (r *userFileRepo) SoftDelete(ctx context.Context, id string) error {
 		Exec(ctx)
 }
 
+func (r *userFileRepo) Restore(ctx context.Context, uf *domain.UserFile) error {
+	return r.client.UserFile.UpdateOneID(uf.ID).
+		ClearDeletedAt().
+		SetVirtualPath(uf.VirtualPath).
+		Exec(ctx)
+}
+
+func (r *userFileRepo) HardDelete(ctx context.Context, id string) error {
+	return r.client.UserFile.DeleteOneID(id).Exec(ctx)
+}
+
 func (r *userFileRepo) ListByVirtualPath(ctx context.Context, userID, pathID string, offset, limit int) ([]*domain.UserFile, error) {
 	es, err := r.client.UserFile.Query().
 		Where(

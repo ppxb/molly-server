@@ -11,10 +11,14 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	appfile "molly-server/internal/application/file"
+	apprecycled "molly-server/internal/application/recycled"
 	"molly-server/internal/infrastructure/config"
 	"molly-server/internal/infrastructure/persistence"
 	"molly-server/internal/presentation/http"
+	"molly-server/internal/task"
 	"molly-server/pkg/auth"
+	"molly-server/pkg/cache"
 	"molly-server/pkg/logger"
 )
 
@@ -62,8 +66,17 @@ func cmdServer() *cli.Command {
 			auth.Init(cfg.Auth.Secret)
 
 			db := mustInitDB(cfg, log)
+			c := mustInitCache(cfg, log)
 
-			srv := http.NewServer(cfg, db, log)
+			recycledUC := buildRecycledUseCase(db, log)
+			uploadRepo := persistence.NewUploadTaskRepo(db.Client)
+
+			stopRecycled := task.NewRecycledCleanup(recycledUC, 30, log).Start(24 * time.Hour)
+			stopUpload := task.NewUploadCleanup(uploadRepo, log).Start(24 * time.Hour)
+			defer stopRecycled()
+			defer stopUpload()
+
+			srv := http.NewServer(cfg, db, c, log, recycledUC)
 			return runUntilSignal(srv.Start, srv.Shutdown, log)
 		},
 	}
@@ -94,7 +107,6 @@ func cmdMigrate() *cli.Command {
 func mustInitLogger(cfg *config.Config) *logger.Logger {
 	l, err := logger.New(cfg.Log)
 	if err != nil {
-		// parseLevel 返回的是非致命降级错误，打印 warn 后继续
 		stdlog.Printf("warn: logger: %v", err)
 	}
 	return l
@@ -107,6 +119,47 @@ func mustInitDB(cfg *config.Config, log *logger.Logger) *persistence.DB {
 		os.Exit(1)
 	}
 	return db
+}
+
+func mustInitCache(cfg *config.Config, log *logger.Logger) cache.Cache {
+	c, err := cache.New(cfg.Cache, log)
+	if err != nil {
+		log.Error("cache init failed", "error", err)
+		os.Exit(1)
+	}
+	return c
+}
+
+// buildRecycledUseCase 在 cmd 层完成 recycled 域的依赖组装。
+// 此处集中组装避免跨包循环依赖。
+func buildRecycledUseCase(db *persistence.DB, log *logger.Logger) *apprecycled.UseCase {
+	return apprecycled.NewUseCase(apprecycled.Deps{
+		Recycled:    persistence.NewRecycledRepo(db.Client),
+		UserFile:    persistence.NewUserFileRepo(db.Client),
+		FileInfo:    persistence.NewFileInfoRepo(db.Client),
+		VirtualPath: persistence.NewVirtualPathRepo(db.Client),
+		UserRepo:    persistence.NewUserRepo(db.Client),
+		Log:         log,
+	})
+}
+
+// buildFileUseCase 组装 file 域，注入 recycledUC.MoveToRecycled 打通删除流程。
+func buildFileUseCase(
+	cfg *config.Config,
+	db *persistence.DB,
+	c cache.Cache,
+	recycledUC *apprecycled.UseCase,
+) *appfile.UseCase {
+	return appfile.NewUseCase(appfile.Deps{
+		FileInfo:       persistence.NewFileInfoRepo(db.Client),
+		UserFile:       persistence.NewUserFileRepo(db.Client),
+		VirtualPath:    persistence.NewVirtualPathRepo(db.Client),
+		UploadTask:     persistence.NewUploadTaskRepo(db.Client),
+		UserRepo:       persistence.NewUserRepo(db.Client),
+		Cache:          c,
+		StoragePath:    cfg.Storage.Local.DataDir,
+		MoveToRecycled: recycledUC.MoveToRecycled, // 函数注入，解耦域依赖
+	})
 }
 
 func runUntilSignal(start func() error, shutdown func(ctx context.Context) error, log *logger.Logger) error {

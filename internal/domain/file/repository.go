@@ -18,10 +18,16 @@ type FileInfoRepository interface {
 // UserFileRepository 用户-文件逻辑关联接口。
 type UserFileRepository interface {
 	Create(ctx context.Context, uf *UserFile) error
-	GetByID(ctx context.Context, id string) (*UserFile, error) // by uf_id
+	// GetByID 按 uf_id 查询，包括已软删除的记录（回收站还原时使用）。
+	GetByID(ctx context.Context, id string) (*UserFile, error)
 	GetByUserAndUfID(ctx context.Context, userID, ufID string) (*UserFile, error)
 	Update(ctx context.Context, uf *UserFile) error
-	SoftDelete(ctx context.Context, id string) error // 设置 deleted_at
+	// SoftDelete 设置 deleted_at，文件进入回收站。
+	SoftDelete(ctx context.Context, id string) error
+	// Restore 清除 deleted_at 并按需更新 VirtualPath（还原时使用）。
+	Restore(ctx context.Context, uf *UserFile) error
+	// HardDelete 物理删除行，永久删除时使用（绕过软删除过滤）。
+	HardDelete(ctx context.Context, id string) error
 	ListByVirtualPath(ctx context.Context, userID, pathID string, offset, limit int) ([]*UserFile, error)
 	CountByVirtualPath(ctx context.Context, userID, pathID string) (int64, error)
 	Search(ctx context.Context, userID, keyword string, offset, limit int) ([]*UserFile, error)

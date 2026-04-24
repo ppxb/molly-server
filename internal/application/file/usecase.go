@@ -1,5 +1,3 @@
-// internal/application/file/usecase.go
-
 package file
 
 import (
@@ -38,6 +36,9 @@ type Deps struct {
 	UserRepo    domainuser.Repository // 读取用户空间配额
 	Cache       cache.Cache
 	StoragePath string // 文件存储根路径
+	// MoveToRecycled 由 recycled/UseCase 提供，解耦两个域的依赖方向。
+	// file 域不直接依赖 recycled 域，通过函数注入实现协作。
+	MoveToRecycled func(ctx context.Context, userID, userFileID string) error
 }
 
 type UseCase struct {
@@ -600,13 +601,14 @@ func (uc *UseCase) DeleteDir(ctx context.Context, userID string, req DeleteDirRe
 func (uc *UseCase) DeleteFiles(ctx context.Context, userID string, req DeleteFilesReq) (*DeleteFilesResp, error) {
 	resp := &DeleteFilesResp{}
 	for _, ufID := range req.FileIDs {
-		uf, err := uc.deps.UserFile.GetByUserAndUfID(ctx, userID, ufID)
-		if err != nil {
+		// 验证归属权
+		if _, err := uc.deps.UserFile.GetByUserAndUfID(ctx, userID, ufID); err != nil {
 			resp.Failed++
 			resp.Errors = append(resp.Errors, fmt.Sprintf("%s: not found", ufID))
 			continue
 		}
-		if err := uc.deps.UserFile.SoftDelete(ctx, uf.ID); err != nil {
+		// 软删除 + 创建回收站记录（由注入的函数完成，保持域边界）
+		if err := uc.deps.MoveToRecycled(ctx, userID, ufID); err != nil {
 			resp.Failed++
 			resp.Errors = append(resp.Errors, fmt.Sprintf("%s: %v", ufID, err))
 			continue
